@@ -1,0 +1,1200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NextStep AI — Live Interview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+  <style>
+    :root{
+      --navy:#0A1628;--navy2:#0D1F3C;--navy3:#112240;
+      --teal:#00C9A7;--white:#FFFFFF;--off-white:#F5F9FC;
+      --border-dark:rgba(255,255,255,0.1);
+      --text-dark:#0A1628;--text-mid:#4A5568;--text-light:#8A9BB0;
+      --warn:#F5A623;--danger:#F5222D;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:'Outfit',sans-serif;background:var(--navy);color:#fff;height:100vh;overflow:hidden;display:flex;flex-direction:column;}
+
+    /* ── TOP BAR ─────────────────────────────────────────────── */
+    .topbar{height:60px;background:var(--navy2);border-bottom:1px solid var(--border-dark);display:flex;align-items:center;justify-content:space-between;padding:0 24px;flex-shrink:0;}
+    .topbar-logo{font-family:'Syne',sans-serif;font-weight:800;font-size:1rem;display:flex;align-items:center;gap:8px;}
+    .logo-dot{width:7px;height:7px;background:var(--teal);border-radius:50%;}
+    .topbar-mid{display:flex;gap:8px;align-items:center;}
+    .topbar-badge{font-size:0.78rem;color:rgba(255,255,255,0.5);background:rgba(255,255,255,0.07);padding:4px 12px;border-radius:50px;border:1px solid var(--border-dark);}
+    .topbar-right{display:flex;gap:20px;align-items:center;}
+    .timer-block{text-align:right;}
+    .timer-lbl{font-size:0.62rem;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.5px;}
+    .timer-val{font-family:'Syne',sans-serif;font-size:0.95rem;font-weight:700;}
+    .timer-val.warn{color:var(--warn);}
+    .timer-val.danger{color:var(--danger);animation:tPulse 0.8s infinite;}
+    @keyframes tPulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
+
+    /* ── PANELS ──────────────────────────────────────────────── */
+    .panels{flex:1;display:grid;grid-template-columns:60% 40%;min-height:0;}
+
+    /* ── AI PANEL ────────────────────────────────────────────── */
+    .ai-panel{
+      background:linear-gradient(160deg,var(--navy3) 0%,#060d1a 100%);
+      border-right:1px solid var(--border-dark);
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      gap:14px;position:relative;overflow:hidden;
+    }
+    .ai-panel::before{
+      content:'';position:absolute;inset:0;
+      background:radial-gradient(ellipse at 50% 60%,rgba(0,201,167,0.07) 0%,transparent 60%);
+      pointer-events:none;
+    }
+
+    /* ── WHITE ROBOT ─────────────────────────────────────────── */
+    .robot-wrap{
+      display:flex;flex-direction:column;align-items:center;
+      position:relative;z-index:2;
+      transform-style:preserve-3d;
+    }
+    .robot{
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      animation:float 3s ease-in-out infinite;
+      transition:transform 0.25s ease;
+      cursor:default;
+    }
+    @keyframes float{
+      0%,100%{transform:translateY(0px);}
+      50%{transform:translateY(-10px);}
+    }
+
+    /* Speaking — override float */
+    .robot.speaking{animation:speak 0.35s ease-in-out infinite!important;}
+    @keyframes speak{
+      0%,100%{transform:translateY(0px) rotate(0deg);}
+      25%{transform:translateY(-2px) rotate(0.4deg);}
+      75%{transform:translateY(-2px) rotate(-0.4deg);}
+    }
+    /* Listening — lean forward */
+    .robot.listening{animation:listen 1s ease-in-out infinite!important;}
+    @keyframes listen{
+      0%,100%{transform:translateY(0px) rotateX(0deg);}
+      50%{transform:translateY(-5px) rotateX(6deg);}
+    }
+    /* Thinking — bob */
+    .robot.thinking{animation:think 1.2s ease-in-out infinite!important;}
+    @keyframes think{
+      0%,100%{transform:translateY(0px) rotate(-2deg);}
+      50%{transform:translateY(-10px) rotate(2deg);}
+    }
+    /* Nodding */
+    .robot.nodding .robot-head{animation:nod 0.4s ease-in-out 3;}
+    @keyframes nod{
+      0%,100%{transform:rotateX(0deg);}
+      30%{transform:rotateX(-12deg);}
+      70%{transform:rotateX(8deg);}
+    }
+
+    /* ── HEAD ─────────────────────────────────────────────────── */
+    .robot-head{
+      background:linear-gradient(145deg,#f5f5f5,#e8e8e8);
+      border-radius:50% 50% 45% 45%;
+      width:100px;height:90px;
+      position:relative;
+      border:2px solid #cccccc;
+      box-shadow:0 4px 16px rgba(0,0,0,0.25),inset 0 1px 0 rgba(255,255,255,0.8);
+    }
+    /* Shine */
+    .robot-head::after{
+      content:'';position:absolute;top:8px;left:12px;
+      width:30px;height:18px;
+      background:rgba(255,255,255,0.4);
+      border-radius:50%;
+      transform:rotate(-20deg);
+    }
+
+    /* ── ANTENNA ─────────────────────────────────────────────── */
+    .antenna{position:absolute;top:-22px;left:50%;transform:translateX(-50%);}
+    .antenna-line{width:3px;height:16px;background:#aaa;margin:0 auto;border-radius:2px;}
+    .antenna-ball{
+      width:11px;height:11px;
+      background:radial-gradient(circle at 35% 35%,#ff6666,#cc1111);
+      border-radius:50%;
+      margin:0 auto;
+      box-shadow:0 0 6px rgba(255,50,50,0.7);
+      animation:antGlow 1.8s ease infinite;
+    }
+    @keyframes antGlow{
+      0%,100%{box-shadow:0 0 6px rgba(255,50,50,0.6);}
+      50%{box-shadow:0 0 14px rgba(255,80,80,1),0 0 24px rgba(255,80,80,0.4);}
+    }
+
+    /* ── FACE ─────────────────────────────────────────────────── */
+    .robot-face{
+      display:flex;flex-direction:column;align-items:center;
+      padding-top:22px;gap:0;
+    }
+    .eyes-container{display:flex;gap:20px;justify-content:center;}
+    .eye{
+      width:22px;height:22px;
+      background:#111;border-radius:50%;
+      position:relative;
+      box-shadow:inset 0 2px 4px rgba(0,0,0,0.5);
+      transition:transform 0.1s;
+    }
+    .eye.blink{animation:eyeBlink 0.15s ease both;}
+    @keyframes eyeBlink{0%,100%{transform:scaleY(1);}50%{transform:scaleY(0.05);}}
+    .pupil{
+      width:9px;height:9px;
+      background:radial-gradient(circle at 35% 35%,#fff,#ddd);
+      border-radius:50%;
+      position:absolute;top:6px;left:6px;
+      transition:transform 0.08s ease;
+    }
+    .mouth{
+      width:32px;height:5px;
+      background:#999;
+      border-radius:3px;
+      margin-top:14px;
+      transition:height 0.12s ease;
+    }
+    .robot.speaking .mouth{animation:mouthTalk 0.25s ease infinite;}
+    @keyframes mouthTalk{0%,100%{height:4px;}50%{height:14px;border-radius:3px 3px 6px 6px;}}
+
+    /* ── BODY ─────────────────────────────────────────────────── */
+    .robot-body{
+      background:linear-gradient(160deg,#f0f0f0,#e0e0e0);
+      width:84px;height:90px;
+      border-radius:20px;
+      margin-top:-8px;
+      border:2px solid #cccccc;
+      position:relative;
+      box-shadow:0 6px 20px rgba(0,0,0,0.25),inset 0 1px 0 rgba(255,255,255,0.7);
+    }
+    .robot-body::after{
+      content:'';position:absolute;top:6px;left:10px;
+      width:24px;height:14px;
+      background:rgba(255,255,255,0.35);
+      border-radius:50%;
+      transform:rotate(-15deg);
+    }
+    .chest-panel{
+      width:44px;height:32px;
+      background:linear-gradient(135deg,#e8e8e8,#d8d8d8);
+      border-radius:10px;
+      margin:18px auto 0;
+      border:1.5px solid #bbb;
+      position:relative;
+      display:flex;align-items:center;justify-content:center;
+    }
+    .chest-light{
+      width:10px;height:10px;border-radius:50%;
+      background:var(--teal);
+      box-shadow:0 0 8px var(--teal);
+      animation:chestBeat 1.6s ease infinite;
+    }
+    @keyframes chestBeat{0%,100%{opacity:0.7;}50%{opacity:1;box-shadow:0 0 14px var(--teal);}}
+
+    /* ── ARMS ─────────────────────────────────────────────────── */
+    .arms{
+      display:flex;gap:108px;
+      margin-top:-72px;position:relative;z-index:1;
+    }
+    .arm{
+      width:16px;height:52px;
+      background:linear-gradient(to bottom,#f0f0f0,#e0e0e0);
+      border-radius:10px;
+      border:2px solid #ccc;
+      box-shadow:2px 2px 6px rgba(0,0,0,0.15);
+    }
+    .left-arm{animation:leftArm 4s ease-in-out infinite;}
+    .right-arm{animation:rightArm 4s ease-in-out infinite;}
+    @keyframes leftArm{ 0%,100%{transform:rotate(-6deg);}50%{transform:rotate(-16deg);} }
+    @keyframes rightArm{ 0%,100%{transform:rotate(6deg);}50%{transform:rotate(16deg);} }
+
+    /* ── ROBOT SHADOW ────────────────────────────────────────── */
+    .robot-shadow{
+      width:70px;height:12px;
+      background:radial-gradient(ellipse,rgba(0,0,0,0.25),transparent 70%);
+      border-radius:50%;
+      margin-top:6px;
+      animation:shadowBob 3s ease-in-out infinite;
+    }
+    @keyframes shadowBob{0%,100%{transform:scaleX(1);opacity:0.7;}50%{transform:scaleX(0.8);opacity:0.4;}}
+
+    /* ── THINK DOTS ──────────────────────────────────────────── */
+    .think-dots{display:none;gap:5px;justify-content:center;z-index:2;}
+    .think-dots span{width:7px;height:7px;background:var(--teal);border-radius:50%;animation:dotB 0.9s ease infinite;}
+    .think-dots span:nth-child(2){animation-delay:0.15s;}
+    .think-dots span:nth-child(3){animation-delay:0.3s;}
+    @keyframes dotB{0%,80%,100%{transform:translateY(0);}40%{transform:translateY(-8px);}}
+    .robot-wrap.state-thinking .think-dots{display:flex;}
+
+    /* ── LISTEN WAVES ────────────────────────────────────────── */
+    .listen-waves{display:none;position:absolute;right:-32px;top:50%;transform:translateY(-50%);gap:3px;align-items:flex-end;}
+    .listen-waves span{width:4px;background:var(--teal);border-radius:2px;animation:waveB 0.6s ease infinite;}
+    .listen-waves span:nth-child(1){height:10px;}
+    .listen-waves span:nth-child(2){height:18px;animation-delay:0.1s;}
+    .listen-waves span:nth-child(3){height:12px;animation-delay:0.2s;}
+    @keyframes waveB{0%,100%{transform:scaleY(0.5);}50%{transform:scaleY(1.2);}}
+    .robot-wrap.state-listening .listen-waves{display:flex;}
+
+    /* ── SPEECH BUBBLE ───────────────────────────────────────── */
+    .speech-bubble{
+      position:absolute;top:-54px;left:50%;transform:translateX(-50%);
+      background:rgba(13,31,60,0.96);border:1px solid rgba(0,201,167,0.4);
+      border-radius:12px;padding:8px 14px;font-size:0.76rem;
+      white-space:nowrap;opacity:0;transition:opacity 0.3s;
+      pointer-events:none;backdrop-filter:blur(8px);z-index:10;
+      box-shadow:0 4px 16px rgba(0,0,0,0.4);
+    }
+    .speech-bubble::after{content:'';position:absolute;bottom:-7px;left:50%;transform:translateX(-50%);border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid rgba(0,201,167,0.4);}
+    .speech-bubble.show{opacity:1;}
+
+    /* ── ROBOT STATUS ────────────────────────────────────────── */
+    .robot-name{font-family:'Syne',sans-serif;font-weight:700;font-size:0.95rem;color:#fff;z-index:2;}
+    .robot-status{font-size:0.76rem;color:rgba(255,255,255,0.4);min-height:16px;z-index:2;}
+
+    /* ── POSTURE RING ─────────────────────────────────────────── */
+    .posture-ring-wrap{position:absolute;top:16px;right:16px;z-index:3;display:flex;flex-direction:column;align-items:center;gap:3px;}
+    .posture-ring{width:42px;height:42px;}
+    .pr-bg{fill:none;stroke:rgba(255,255,255,0.06);stroke-width:4;}
+    .pr-fill{fill:none;stroke-width:4;stroke-linecap:round;transition:stroke-dashoffset 0.5s,stroke 0.4s;}
+    .pr-lbl{font-size:0.58rem;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.5px;}
+
+    /* ── LIVE SCORE PILLS ────────────────────────────────────── */
+    .live-scores{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;z-index:2;}
+    .score-pill{background:rgba(10,15,25,0.8);border:1px solid rgba(255,255,255,0.08);border-radius:50px;padding:5px 12px;font-size:0.75rem;color:rgba(255,255,255,0.6);display:flex;align-items:center;gap:4px;}
+    .score-pill .val{font-weight:700;color:#fff;}
+
+    /* ── USER PANEL ──────────────────────────────────────────── */
+    .user-panel{background:var(--navy2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;}
+    .user-video-wrap{width:100%;max-width:380px;position:relative;border-radius:20px;overflow:hidden;border:2px solid rgba(255,255,255,0.1);background:#060c18;transition:border-color 0.2s,box-shadow 0.2s;aspect-ratio:4/3;}
+    .user-video-wrap.speaking{border-color:var(--teal);box-shadow:0 0 20px rgba(0,201,167,0.25);}
+    #selfVideo{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block;}
+    #poseCanvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10;}
+    .cam-off{display:none;position:absolute;inset:0;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:rgba(255,255,255,0.3);font-size:0.82rem;}
+    .cam-off.show{display:flex;}
+    .cam-off span{font-size:2.5rem;}
+    .user-label{font-size:0.74rem;color:rgba(255,255,255,0.45);display:flex;align-items:center;gap:8px;}
+    .mic-ind{width:8px;height:8px;border-radius:50%;background:var(--teal);transition:background 0.2s;}
+    .mic-ind.muted{background:var(--danger);}
+
+    /* ── QUESTION PANEL ──────────────────────────────────────── */
+    .q-panel{background:#fff;border-top:3px solid var(--teal);padding:15px 28px;flex-shrink:0;position:relative;color:var(--text-dark);}
+    .q-progress-track{height:4px;background:#EAF4F0;border-radius:2px;margin-bottom:11px;overflow:hidden;}
+    .q-progress-fill{height:100%;background:var(--teal);border-radius:2px;transition:width 0.4s ease;}
+    .q-meta-row{display:flex;align-items:center;gap:10px;margin-bottom:7px;flex-wrap:wrap;}
+    .q-num{font-size:0.7rem;color:var(--text-light);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;}
+    .diff-badge{padding:3px 10px;border-radius:50px;font-size:0.68rem;font-weight:700;text-transform:uppercase;}
+    .diff-easy{background:rgba(0,201,167,0.12);color:#00A88A;border:1px solid rgba(0,201,167,0.25);}
+    .diff-medium{background:rgba(245,166,35,0.12);color:#B87200;border:1px solid rgba(245,166,35,0.25);}
+    .diff-hard{background:rgba(245,34,45,0.12);color:#C00;border:1px solid rgba(245,34,45,0.2);}
+    .q-text{font-size:0.98rem;font-weight:600;color:var(--text-dark);line-height:1.5;margin-bottom:8px;}
+    .transcript-lbl{font-size:0.67rem;color:var(--text-light);margin-bottom:3px;text-transform:uppercase;letter-spacing:0.5px;}
+    .transcript-area{max-height:56px;overflow-y:auto;font-size:0.82rem;line-height:1.5;color:var(--text-mid);}
+    .star-tip{position:absolute;top:12px;right:14px;background:rgba(0,201,167,0.08);border:1px solid rgba(0,201,167,0.25);border-radius:10px;padding:6px 12px;font-size:0.7rem;color:var(--teal);display:none;}
+    .star-tip.show{display:block;}
+    .star-tip .cls{cursor:pointer;margin-left:8px;opacity:0.5;}
+    .fallback-row{display:none;width:100%;margin-top:8px;}
+    .fallback-row.show{display:flex;gap:8px;}
+    .fallback-row input{flex:1;background:var(--off-white);border:1.5px solid #E2EBF0;color:var(--text-dark);padding:8px 14px;border-radius:10px;font-family:'Outfit',sans-serif;font-size:0.88rem;}
+    .fallback-row input:focus{outline:none;border-color:var(--teal);}
+    .fallback-row button{background:var(--teal);color:var(--navy);border:none;padding:8px 18px;border-radius:10px;cursor:pointer;font-family:'Outfit',sans-serif;font-weight:700;}
+
+    /* ── CONTROL BAR ─────────────────────────────────────────── */
+    .ctrl-bar{height:70px;background:var(--navy2);border-top:1px solid var(--border-dark);display:flex;align-items:center;justify-content:space-between;padding:0 24px;flex-shrink:0;gap:16px;}
+    .ctrl-grp{display:flex;gap:8px;align-items:center;}
+    .ctrl-btn{background:rgba(255,255,255,0.06);border:1px solid var(--border-dark);color:rgba(255,255,255,0.6);padding:8px 16px;border-radius:50px;font-family:'Outfit',sans-serif;font-size:0.8rem;font-weight:500;cursor:pointer;transition:all 0.2s;}
+    .ctrl-btn:hover{border-color:var(--teal);color:#fff;}
+    .ctrl-btn.active{background:rgba(0,201,167,0.15);border-color:var(--teal);color:var(--teal);}
+    .ctrl-btn.red{border-color:rgba(245,34,45,0.4);color:var(--danger);}
+    .ctrl-btn.red:hover{background:rgba(245,34,45,0.1);}
+    .done-btn{background:var(--teal);color:var(--navy);border:none;padding:11px 28px;border-radius:50px;font-family:'Outfit',sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer;min-width:200px;transition:all 0.2s;}
+    .done-btn:disabled{opacity:0.35;cursor:not-allowed;animation:none;}
+    .done-btn:not(:disabled){animation:donePulse 2s ease infinite;}
+    @keyframes donePulse{0%,100%{box-shadow:0 0 0 0 rgba(0,201,167,0.4);}50%{box-shadow:0 0 0 10px rgba(0,201,167,0);}}
+    .vol-row{display:flex;align-items:center;gap:7px;font-size:0.73rem;color:rgba(255,255,255,0.3);}
+    #volSlider{width:72px;height:4px;accent-color:var(--teal);cursor:pointer;}
+
+    /* ── OVERLAY ─────────────────────────────────────────────── */
+    .overlay{position:fixed;inset:0;background:rgba(10,22,40,0.97);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;text-align:center;padding:32px;}
+    .overlay.hide{display:none;}
+    .overlay h2{font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;}
+    .overlay p{font-size:0.9rem;color:rgba(255,255,255,0.5);}
+    .ov-dots{display:flex;gap:8px;}
+    .ov-dots span{width:10px;height:10px;background:var(--teal);border-radius:50%;animation:dotB 0.9s ease infinite;}
+    .ov-dots span:nth-child(2){animation-delay:0.15s;}
+    .ov-dots span:nth-child(3){animation-delay:0.3s;}
+
+    /* ── PERMISSION MODAL ────────────────────────────────────── */
+    .perm-modal{position:fixed;inset:0;background:rgba(10,22,40,0.97);backdrop-filter:blur(12px);z-index:300;display:flex;align-items:center;justify-content:center;}
+    .perm-box{background:linear-gradient(145deg,#0d1f3c,#0a1628);border:1px solid rgba(0,201,167,0.25);border-radius:24px;padding:40px 36px;max-width:400px;width:90%;text-align:center;}
+    .perm-icon{font-size:3rem;margin-bottom:16px;}
+    .perm-box h3{font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:800;margin-bottom:12px;}
+    .perm-box p{font-size:0.86rem;color:rgba(255,255,255,0.55);line-height:1.7;margin-bottom:28px;}
+    .perm-btns{display:flex;flex-direction:column;gap:12px;}
+    .btn-allow{background:var(--teal);color:var(--navy);border:none;padding:13px 28px;border-radius:50px;font-family:'Outfit',sans-serif;font-size:0.9rem;font-weight:700;cursor:pointer;transition:all 0.2s;}
+    .btn-allow:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,201,167,0.4);}
+    .btn-skip{background:transparent;color:rgba(255,255,255,0.35);border:1px solid rgba(255,255,255,0.12);padding:11px 28px;border-radius:50px;font-family:'Outfit',sans-serif;font-size:0.84rem;cursor:pointer;transition:all 0.2s;}
+    .btn-skip:hover{border-color:rgba(255,255,255,0.3);color:rgba(255,255,255,0.6);}
+
+    /* ── TOAST ───────────────────────────────────────────────── */
+    #toast{position:fixed;bottom:88px;right:18px;background:rgba(10,22,40,0.96);border:1px solid rgba(255,255,255,0.08);padding:10px 18px;border-radius:50px;border-left:4px solid var(--teal);font-size:0.82rem;z-index:1000;display:none;box-shadow:0 6px 20px rgba(0,0,0,0.5);backdrop-filter:blur(8px);animation:toastIn 0.3s ease;}
+    @keyframes toastIn{from{opacity:0;transform:translateX(18px);}to{opacity:1;transform:translateX(0);}}
+  </style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-logo"><div class="logo-dot"></div> NextStep AI</div>
+  <div class="topbar-mid">
+    <div class="topbar-badge" id="topbarType">Interview</div>
+    <div class="topbar-badge" id="companyBadge" style="display:none;"></div>
+  </div>
+  <div class="topbar-right">
+    <div class="timer-block"><div class="timer-lbl">Total</div><div class="timer-val" id="totalTimer">0:00</div></div>
+    <div class="timer-block"><div class="timer-lbl">This Q</div><div class="timer-val" id="qTimer">—</div></div>
+    <div style="font-size:0.65rem;color:rgba(255,255,255,0.2);">CO26-CD7CCEA8</div>
+  </div>
+</div>
+
+<div class="panels">
+
+  <!-- ── AI PANEL ─────────────────────────────────────────────── -->
+  <div class="ai-panel">
+
+    <!-- Posture ring -->
+    <div class="posture-ring-wrap" title="Posture score">
+      <svg class="posture-ring" viewBox="0 0 42 42">
+        <circle class="pr-bg" cx="21" cy="21" r="17"/>
+        <circle class="pr-fill" id="prFill" cx="21" cy="21" r="17"
+          stroke-dasharray="106.81" stroke-dashoffset="106.81" stroke="#00C9A7"
+          transform="rotate(-90 21 21)"/>
+      </svg>
+      <div class="pr-lbl">posture</div>
+    </div>
+
+    <!-- Robot wrapper -->
+    <div class="robot-wrap" id="robotWrap">
+      <div class="speech-bubble" id="speechBubble"></div>
+      <div class="listen-waves"><span></span><span></span><span></span></div>
+
+      <!-- THE WHITE ROBOT -->
+      <div class="robot" id="robot">
+        <div class="robot-head">
+          <div class="antenna">
+            <div class="antenna-ball"></div>
+            <div class="antenna-line"></div>
+          </div>
+          <div class="robot-face">
+            <div class="eyes-container">
+              <div class="eye left-eye"><div class="pupil"></div></div>
+              <div class="eye right-eye"><div class="pupil"></div></div>
+            </div>
+            <div class="mouth"></div>
+          </div>
+        </div>
+        <div class="robot-body">
+          <div class="chest-panel"><div class="chest-light"></div></div>
+        </div>
+        <div class="arms">
+          <div class="arm left-arm"></div>
+          <div class="arm right-arm"></div>
+        </div>
+      </div>
+
+      <div class="robot-shadow"></div>
+      <div class="think-dots"><span></span><span></span><span></span></div>
+    </div>
+
+    <div class="robot-name">Aria</div>
+    <div class="robot-status" id="robotStatus">Preparing your interview…</div>
+
+    <div class="live-scores">
+      <div class="score-pill">📊 Filler: <span class="val" id="fillerCount">0</span></div>
+      <div class="score-pill">🎯 Score: <span class="val" id="confidenceScore">--</span>%</div>
+      <div class="score-pill">🎤 Tone: <span class="val" id="toneStatus">--</span></div>
+    </div>
+  </div>
+
+  <!-- ── USER PANEL ──────────────────────────────────────────────── -->
+  <div class="user-panel">
+    <div class="user-video-wrap" id="videoWrap">
+      <video id="selfVideo" autoplay playsinline muted></video>
+      <canvas id="poseCanvas"></canvas>
+      <div class="cam-off" id="camOff"><span>👤</span><div>Camera unavailable</div></div>
+    </div>
+    <div class="user-label"><div class="mic-ind" id="micInd"></div> You</div>
+  </div>
+</div>
+
+<!-- QUESTION PANEL -->
+<div class="q-panel">
+  <div class="q-progress-track"><div class="q-progress-fill" id="qProgress" style="width:0%"></div></div>
+  <div class="q-meta-row">
+    <div class="q-num" id="qNum">Setting up...</div>
+    <div id="diffBadge"></div>
+  </div>
+  <div class="q-text" id="qText">Please wait while Aria prepares your questions...</div>
+  <div class="transcript-lbl">Your answer:</div>
+  <div class="transcript-area" id="transcript"></div>
+  <div class="fallback-row" id="fallbackRow">
+    <input type="text" id="fallbackInput" placeholder="Type your answer here...">
+    <button id="fallbackDone">Done</button>
+  </div>
+  <div class="star-tip" id="starTip"><strong>STAR:</strong> Situation → Task → Action → Result <span class="cls" id="closeStar">✕</span></div>
+</div>
+
+<!-- CONTROL BAR -->
+<div class="ctrl-bar">
+  <div class="ctrl-grp">
+    <button class="ctrl-btn" id="muteBtn">🎙️ Mute</button>
+    <button class="ctrl-btn" id="camBtn">📷 Camera</button>
+  </div>
+  <div class="ctrl-grp">
+    <button class="done-btn" id="doneBtn" disabled>✓ Done Answering</button>
+  </div>
+  <div class="ctrl-grp">
+    <div class="vol-row">🔊<input type="range" id="volSlider" min="0" max="1" step="0.05" value="0.8"></div>
+    <button class="ctrl-btn" id="skipBtn">Skip →</button>
+    <button class="ctrl-btn red" id="endBtn">End Interview</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- LOADING OVERLAY -->
+<div class="overlay" id="overlay">
+  <div class="ov-dots"><span></span><span></span><span></span></div>
+  <h2 id="ovTitle">Aria is preparing your questions...</h2>
+  <p id="ovMsg">Analysing your resume and crafting personalised questions.</p>
+</div>
+
+<script src="config.js"></script>
+<script>
+'use strict';
+
+// ══════════════════════════════════════════════════════════════════
+// ELEMENT REFS
+// ══════════════════════════════════════════════════════════════════
+const robotEl     = document.getElementById('robot');
+const robotWrap   = document.getElementById('robotWrap');
+const robotStatus = document.getElementById('robotStatus');
+const bubbleEl    = document.getElementById('speechBubble');
+const selfVideo   = document.getElementById('selfVideo');
+const camOff      = document.getElementById('camOff');
+const videoWrap   = document.getElementById('videoWrap');
+const micInd      = document.getElementById('micInd');
+const transcript  = document.getElementById('transcript');
+const qTextEl     = document.getElementById('qText');
+const qNumEl      = document.getElementById('qNum');
+const qProgress   = document.getElementById('qProgress');
+const totalTimerEl= document.getElementById('totalTimer');
+const qTimerEl    = document.getElementById('qTimer');
+const diffBadge   = document.getElementById('diffBadge');
+const doneBtn     = document.getElementById('doneBtn');
+const skipBtn     = document.getElementById('skipBtn');
+const endBtn      = document.getElementById('endBtn');
+const muteBtn     = document.getElementById('muteBtn');
+const camBtn      = document.getElementById('camBtn');
+const volSlider   = document.getElementById('volSlider');
+const overlay     = document.getElementById('overlay');
+const ovTitle     = document.getElementById('ovTitle');
+const ovMsg       = document.getElementById('ovMsg');
+const starTip     = document.getElementById('starTip');
+const closeStar   = document.getElementById('closeStar');
+const fallbackRow = document.getElementById('fallbackRow');
+const fallbackInp = document.getElementById('fallbackInput');
+const fallbackDon = document.getElementById('fallbackDone');
+const toastEl     = document.getElementById('toast');
+const fillerCountEl   = document.getElementById('fillerCount');
+const confidenceEl    = document.getElementById('confidenceScore');
+const toneStatusEl    = document.getElementById('toneStatus');
+const prFill          = document.getElementById('prFill');
+const topbarType      = document.getElementById('topbarType');
+const companyBadge    = document.getElementById('companyBadge');
+
+// ══════════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════════
+let settings = {}, mediaStream = null, isMuted = false, isVideoOn = true;
+let numQuestions = 6, perQuestionTime = 150;
+let speakingAC = null, toneAC = null, toneAnalyser = null;
+let totalSeconds = 0, totalInterval = null;
+let qSeconds = 0, qInterval = null;
+let fillerCount = 0, postureDetector = null;
+let badPostureTimer = null, lastPostureAlert = 0, lastBubbleTime = 0;
+let robotLocked = false;
+
+window.questions   = [];
+window.transcripts = [];
+window.audioBlobs  = [];
+window.allAnswers  = [];  // {question, transcript, analysis}
+window.currentQ    = 0;
+window.currentRecorder    = null;
+window.currentRecognition = null;
+window.currentFinalTranscript = () => '';
+window.globalStream = null;
+
+const FILLER_WORDS = ['um','uh','like','you know','basically','literally','actually','sort of','kind of','right'];
+
+// ══════════════════════════════════════════════════════════════════
+// ROBOT STATE
+// ══════════════════════════════════════════════════════════════════
+const STATE_LABELS = {
+  idle:'Waiting for you…', speaking:'Asking question…',
+  listening:'Listening…', thinking:'Thinking…', nodding:'Nice answer!'
+};
+function setRobot(state) {
+  robotLocked = state !== 'idle';
+  robotEl.className = 'robot ' + state;
+  robotWrap.className = 'robot-wrap state-' + state;
+  robotStatus.textContent = STATE_LABELS[state] || '';
+  if (state === 'nodding') setTimeout(() => { robotLocked = false; setRobot('idle'); }, 1400);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SPEECH BUBBLE
+// ══════════════════════════════════════════════════════════════════
+let bubbleTimer = null;
+function showBubble(msg, ms = 3500) {
+  clearTimeout(bubbleTimer);
+  bubbleEl.textContent = msg;
+  bubbleEl.classList.add('show');
+  lastBubbleTime = Date.now();
+  bubbleTimer = setTimeout(() => bubbleEl.classList.remove('show'), ms);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MOUSE → PUPIL TRACKING
+// ══════════════════════════════════════════════════════════════════
+document.addEventListener('mousemove', e => {
+  const mx = (e.clientX / window.innerWidth)  - 0.5;
+  const my = (e.clientY / window.innerHeight) - 0.5;
+  document.querySelectorAll('.pupil').forEach(p => {
+    p.style.transform = `translate(${mx*6}px,${my*4}px)`;
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// IDLE BLINK LOOP
+// ══════════════════════════════════════════════════════════════════
+function scheduleBlink() {
+  const delay = 3000 + Math.random() * 3000;
+  setTimeout(() => {
+    if (!robotLocked) {
+      document.querySelectorAll('.eye').forEach(e => {
+        e.classList.add('blink');
+        setTimeout(() => e.classList.remove('blink'), 150);
+      });
+    }
+    scheduleBlink();
+  }, delay);
+}
+scheduleBlink();
+
+// ══════════════════════════════════════════════════════════════════
+// POSTURE RING
+// ══════════════════════════════════════════════════════════════════
+function updatePostureRing(score) {
+  const c = 106.81;
+  prFill.style.strokeDashoffset = c - (score / 100) * c;
+  prFill.style.stroke = score >= 70 ? '#00C9A7' : score >= 40 ? '#F5A623' : '#F5222D';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GENTLE POSTURE EVALUATION (only warns if <30 for >15s)
+// ══════════════════════════════════════════════════════════════════
+function evaluatePosture(postureScore) {
+  updatePostureRing(postureScore);
+  const now = Date.now();
+  if (postureScore < 30) {
+    if (!badPostureTimer) badPostureTimer = now;
+    else if (now - badPostureTimer > 15000 && now - lastPostureAlert > 45000) {
+      showBubble('💡 Sit up a little — it makes you sound more confident!', 4000);
+      lastPostureAlert = now;
+      badPostureTimer = null;
+    }
+  } else {
+    badPostureTimer = null;
+  }
+  if (postureScore > 80 && now - lastPostureAlert > 60000) {
+    showBubble('✓ Great posture! Looking professional.', 2500);
+    lastPostureAlert = now;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CONFIDENCE SCORE
+// ══════════════════════════════════════════════════════════════════
+function updateConfidence(posture, eye, fillers) {
+  const fp = Math.max(0, 100 - fillers * 10);
+  const c  = Math.round(posture * 0.4 + eye * 0.3 + fp * 0.3);
+  confidenceEl.textContent = c;
+  confidenceEl.style.color = c > 70 ? '#00C9A7' : c > 40 ? '#F5A623' : '#F5222D';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// VOICE TONE
+// ══════════════════════════════════════════════════════════════════
+async function setupTone(stream) {
+  try {
+    toneAC = new (window.AudioContext || window.webkitAudioContext)();
+    const src = toneAC.createMediaStreamSource(stream);
+    toneAnalyser = toneAC.createAnalyser();
+    toneAnalyser.fftSize = 256;
+    src.connect(toneAnalyser);
+    const data = new Uint8Array(toneAnalyser.frequencyBinCount);
+    function tick() {
+      if (!toneAnalyser) return;
+      toneAnalyser.getByteFrequencyData(data);
+      const avg = data.reduce((a,b)=>a+b,0)/data.length;
+      if (avg > 30)      { toneStatusEl.textContent = 'Confident ✓'; toneStatusEl.style.color = '#00C9A7'; }
+      else if (avg > 15) { toneStatusEl.textContent = 'Moderate';    toneStatusEl.style.color = '#F5A623'; }
+      else               { toneStatusEl.textContent = 'Speak up!';   toneStatusEl.style.color = '#F5222D'; }
+      requestAnimationFrame(tick);
+    }
+    await toneAC.resume();
+    tick();
+  } catch { toneStatusEl.textContent = 'N/A'; }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MEDIAPIPE POSTURE DETECTOR
+// ══════════════════════════════════════════════════════════════════
+class PostureDetector {
+  constructor(video) {
+    this.video = video; this.active = true;
+    this.history = []; this.lastSave = 0;
+    this.postureScore = 100; this.eyeScore = 100;
+    this.init();
+  }
+  init() {
+    try {
+      this.pose = new Pose({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
+      this.pose.setOptions({ modelComplexity:1, smoothLandmarks:true, enableSegmentation:false, minDetectionConfidence:0.5, minTrackingConfidence:0.5 });
+      this.pose.onResults(r => this.process(r));
+      this.loop();
+    } catch(e) { console.warn('MediaPipe:', e); }
+  }
+  loop() {
+    const run = async () => {
+      if (!this.active) return;
+      try { if (this.video.readyState >= 2 && this.pose) await this.pose.send({ image: this.video }); } catch {}
+      setTimeout(run, 110);
+    };
+    run();
+  }
+  stop() { this.active = false; }
+  process(r) {
+    if (!r.poseLandmarks) return;
+    const lm = r.poseLandmarks;
+    // Posture angle
+    const lS = lm[11], rS = lm[12], nose = lm[0];
+    let posture = 100;
+    if (lS && rS && nose) {
+      const ang = Math.abs(Math.atan2(nose.x-(lS.x+rS.x)/2, nose.y-(lS.y+rS.y)/2)*180/Math.PI);
+      if      (ang <= 12) posture = 100 - ang * 0.8;
+      else if (ang <= 25) posture = 90  - (ang-12)*1.2;
+      else if (ang <= 40) posture = 74  - (ang-25)*1.5;
+      else                posture = 51  - Math.min(51,(ang-40)*1.7);
+      posture = Math.max(0,Math.min(100,Math.round(posture)));
+    }
+    // Eye contact
+    const lE = lm[2], rE = lm[5]; let eye = 100;
+    if (lE && rE) {
+      eye = 100 - Math.abs((lE.x+rE.x)/2-0.5)*120 - Math.abs((lE.y+rE.y)/2-0.45)*80;
+      eye = Math.max(0,Math.min(100,Math.round(eye)));
+    }
+    this.postureScore = posture; this.eyeScore = eye;
+    const now = Date.now();
+    if (now - this.lastSave > 1000) {
+      this.lastSave = now;
+      this.history.push({ time:now, posture, eye });
+      if (this.history.length > 300) this.history.shift();
+      try { localStorage.setItem('postureData', JSON.stringify({ history:this.history, finalPosture:posture, finalEye:eye })); } catch {}
+    }
+    evaluatePosture(posture);
+    updateConfidence(posture, eye, fillerCount);
+    this.drawSkeleton(lm, posture, eye);
+  }
+  drawSkeleton(lm, posture, eye) {
+    const canvas = document.getElementById('poseCanvas');
+    const wrap   = document.getElementById('videoWrap');
+    if (!canvas || !wrap) return;
+    const rect = wrap.getBoundingClientRect();
+    canvas.width = rect.width; canvas.height = rect.height;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    const avg   = (posture+eye)/2;
+    const color = avg>70?'#00C9A7':avg>45?'#F5A623':'#F5222D';
+    const conns = [[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24]];
+    ctx.lineWidth=3; ctx.strokeStyle=color; ctx.globalAlpha=0.75;
+    conns.forEach(([s,e]) => {
+      const p1=lm[s],p2=lm[e];
+      if (p1&&p2&&p1.visibility>0.3&&p2.visibility>0.3) {
+        ctx.beginPath();
+        ctx.moveTo((1-p1.x)*canvas.width,p1.y*canvas.height);
+        ctx.lineTo((1-p2.x)*canvas.width,p2.y*canvas.height);
+        ctx.stroke();
+      }
+    });
+    lm.forEach(l => {
+      if (l&&l.visibility>0.3) {
+        ctx.beginPath();
+        ctx.arc((1-l.x)*canvas.width,l.y*canvas.height,4,0,2*Math.PI);
+        ctx.fillStyle=color; ctx.globalAlpha=0.85; ctx.fill();
+      }
+    });
+    ctx.globalAlpha=1;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MEDIA PERMISSION — ask ONCE, remember forever
+// ══════════════════════════════════════════════════════════════════
+async function initMedia() {
+  const stored = localStorage.getItem('micPermission');
+  if (stored === 'true') {
+    return startMedia();       // already granted — silent start
+  }
+  if (stored === 'false') {
+    // User previously denied — just show camera-off UI
+    camOff.classList.add('show');
+    return;
+  }
+  // First time — show modal
+  showPermModal();
+}
+
+function showPermModal() {
+  const modal = document.createElement('div');
+  modal.className = 'perm-modal';
+  modal.innerHTML = `
+    <div class="perm-box">
+      <div class="perm-icon">🤖</div>
+      <h3>Camera &amp; Microphone</h3>
+      <p>Aria needs your camera and mic to track posture, record your answers, and give you personalised feedback.<br><br>Your data never leaves this browser tab.</p>
+      <div class="perm-btns">
+        <button class="btn-allow" id="btnAllow">✓ Allow Access</button>
+        <button class="btn-skip"  id="btnSkip">✗ Skip — text answers only</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+
+  document.getElementById('btnAllow').onclick = async () => {
+    try {
+      await startMedia();
+      localStorage.setItem('micPermission', 'true');
+    } catch(e) {
+      console.warn('Media denied:', e);
+      localStorage.setItem('micPermission', 'false');
+      camOff.classList.add('show');
+    }
+    modal.remove();
+  };
+  document.getElementById('btnSkip').onclick = () => {
+    localStorage.setItem('micPermission', 'false');
+    camOff.classList.add('show');
+    modal.remove();
+  };
+}
+
+async function startMedia() {
+  const s = settings;
+  const constraints = {
+    video: s.cameraId ? { deviceId:{ exact:s.cameraId } } : true,
+    audio: s.micId    ? { deviceId:{ exact:s.micId    } } : true
+  };
+  mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+  window.globalStream = mediaStream;
+  selfVideo.srcObject = mediaStream;
+  selfVideo.style.display = 'block';
+  camOff.classList.remove('show');
+  await new Promise(res => { selfVideo.onloadeddata = res; setTimeout(res, 2000); });
+  setupSpeakingDetection();
+  await setupTone(mediaStream);
+  postureDetector = new PostureDetector(selfVideo);
+}
+
+function setupSpeakingDetection() {
+  if (!mediaStream) return;
+  speakingAC = new (window.AudioContext || window.webkitAudioContext)();
+  const src = speakingAC.createMediaStreamSource(mediaStream);
+  const an  = speakingAC.createAnalyser(); an.fftSize = 256;
+  src.connect(an);
+  const data = new Uint8Array(an.frequencyBinCount);
+  (function tick() {
+    if (!an) return;
+    an.getByteFrequencyData(data);
+    const avg = data.reduce((a,b)=>a+b,0)/data.length;
+    videoWrap.classList.toggle('speaking', avg>15 && !isMuted);
+    requestAnimationFrame(tick);
+  })();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// DEEPSEEK API
+// ══════════════════════════════════════════════════════════════════
+async function callDeepSeek(prompt, sys = '') {
+  const r = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${DEEPSEEK_API_KEY}` },
+    body: JSON.stringify({
+      model:'deepseek-chat',
+      messages: [...(sys?[{role:'system',content:sys}]:[]), {role:'user',content:prompt}],
+      max_tokens:2000, temperature:0.7
+    })
+  });
+  const d = await r.json();
+  return d.choices[0].message.content;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// QUESTION GENERATION — BASED ON ACTUAL RESUME TEXT
+// ══════════════════════════════════════════════════════════════════
+function getFallback(type) {
+  const f = {
+    technical: ['Tell me about yourself.','Describe a challenging technical problem you solved.','How do you approach debugging a production issue?','Walk me through designing a URL shortener.','How do you ensure code quality?','Do you have any questions for us?'],
+    behavioral:['Tell me about yourself.','Describe a time you faced conflict in a team.','Tell me about a time you showed leadership.','How do you handle failure?','What\'s your greatest strength?','Do you have any questions for us?'],
+    general:   ['Tell me about yourself.','Why are you interested in this role?','What are your greatest strengths?','Where do you see yourself in 2 years?','Why should we hire you?','Do you have any questions for us?'],
+    product:   ['Tell me about yourself.','Walk me through a product you admire and why.','How would you prioritise a feature backlog?','Tell me about a time you used data to make a decision.','How do you handle conflicting stakeholder needs?','Do you have any questions for us?']
+  };
+  return (f[type] || f.general).slice(0, numQuestions);
+}
+
+async function generateQuestions() {
+  const resumeText = settings.resumeText || '';
+  const hasResume  = resumeText.length > 50;
+
+  const companyCtx = settings.targetCompany && settings.targetCompany !== 'general'
+    ? `Interview style: ${settings.targetCompanyText || settings.targetCompany}. ${settings.targetCompany==='amazon'?'Focus on Leadership Principles.':''}`
+    : '';
+
+  const prompt = `You are an expert interviewer.
+
+${hasResume
+  ? `Based on this candidate's resume:\n"""\n${resumeText.substring(0,3000)}\n"""\n\nGenerate ${numQuestions} highly specific interview questions that reference ACTUAL details from their resume — their specific skills, projects, companies, technologies, and experiences mentioned. Do NOT ask generic questions if the resume has content.`
+  : `No resume provided. Generate ${numQuestions} general ${settings.interviewTypeText||'interview'} questions.`}
+
+Interview type: ${settings.interviewTypeText || 'General'}
+Role level: ${settings.roleLevelText || 'Entry Level'}
+Difficulty: ${settings.difficulty || 'medium'}
+${companyCtx}
+
+Rules:
+- First question: warm "Tell me about yourself" opener
+- Questions MUST reference specific resume content if available
+- Last question: "Do you have any questions for us?"
+- For behavioral: use STAR phrasing
+- For technical: include at least one problem-solving scenario from their background
+
+Return ONLY a valid JSON array of strings, no markdown, no preamble.
+Example: ["Tell me about your experience with X", "How did you approach Y at Z company?"]`;
+
+  try {
+    const raw = await callDeepSeek(prompt);
+    const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      window.questions = parsed;
+      return;
+    }
+  } catch(e) { console.warn('Q gen failed:', e); }
+  window.questions = getFallback(settings.interviewType || 'general');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// PER-ANSWER ANALYSIS (DeepSeek)
+// ══════════════════════════════════════════════════════════════════
+async function analyzeAnswer(question, answerText) {
+  if (!answerText || answerText.length < 10) {
+    return { score:0, strengths:['N/A'], weaknesses:['No answer given'], improvedAnswer:'' };
+  }
+  const prompt = `Analyze this interview answer and return ONLY valid JSON, no markdown.
+
+Question: ${question}
+Answer: ${answerText}
+
+JSON format:
+{"score":0-100,"strengths":["point1","point2"],"weaknesses":["area1","area2"],"improvedAnswer":"A better version of this answer in 2-3 sentences"}`;
+
+  try {
+    const raw = await callDeepSeek(prompt);
+    return JSON.parse(raw.replace(/```json|```/g,'').trim());
+  } catch {
+    return { score: 60, strengths:['Answer was provided'], weaknesses:['Could be more structured'], improvedAnswer: answerText };
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TIMER HELPERS
+// ══════════════════════════════════════════════════════════════════
+function pad(n) { return String(n).padStart(2,'0'); }
+function fmt(s) { return Math.floor(s/60)+':'+pad(s%60); }
+function startTotal() { totalInterval = setInterval(()=>{ totalSeconds++; totalTimerEl.textContent=fmt(totalSeconds); },1000); }
+function startQ() {
+  clearInterval(qInterval);
+  qSeconds = perQuestionTime;
+  qTimerEl.className = 'timer-val';
+  qTimerEl.textContent = fmt(qSeconds);
+  qInterval = setInterval(()=>{
+    qSeconds--;
+    qTimerEl.textContent = fmt(qSeconds);
+    if (qSeconds<=30&&qSeconds>0) qTimerEl.className='timer-val warn';
+    if (qSeconds<=0) { qTimerEl.className='timer-val danger'; clearInterval(qInterval); }
+  },1000);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// DIFFICULTY BADGE
+// ══════════════════════════════════════════════════════════════════
+function showDiff(q) {
+  const ql = q.toLowerCase();
+  let lv, cls;
+  if (ql.includes('tell me about') || ql.includes('strength') || ql.includes('why are you'))
+    { lv='Easy'; cls='diff-easy'; }
+  else if (ql.includes('design') || ql.includes('architect') || ql.includes('algorithm') || ql.includes('complex') || ql.includes('system'))
+    { lv='Hard'; cls='diff-hard'; }
+  else
+    { lv='Medium'; cls='diff-medium'; }
+  diffBadge.innerHTML = `<span class="diff-badge ${cls}">${lv}</span>`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// FILLER COUNT
+// ══════════════════════════════════════════════════════════════════
+function countFillers(text) {
+  let n=0;
+  const t=text.toLowerCase();
+  FILLER_WORDS.forEach(w => {
+    const m = t.match(new RegExp('\\b'+w.replace(/ /g,'\\s+')+'\\b','gi'));
+    if (m) n += m.length;
+  });
+  return n;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SHOW TOAST
+// ══════════════════════════════════════════════════════════════════
+function showToast(msg, color='var(--teal)', ms=2500) {
+  toastEl.textContent = msg;
+  toastEl.style.borderLeftColor = color;
+  toastEl.style.display = 'block';
+  setTimeout(() => toastEl.style.display='none', ms);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// INTERVIEW FLOW
+// ══════════════════════════════════════════════════════════════════
+function askQuestion(i) {
+  window.currentQ = i;
+  setRobot('speaking');
+  doneBtn.disabled = true;
+  const q = window.questions[i];
+  qTextEl.textContent = q;
+  qNumEl.textContent  = `Question ${i+1} of ${window.questions.length}`;
+  qProgress.style.width = `${(i/window.questions.length)*100}%`;
+  transcript.innerHTML = '';
+  showDiff(q);
+  startQ();
+
+  if ('speechSynthesis' in window) {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(q);
+    u.rate=0.9; u.pitch=1.1; u.volume=parseFloat(volSlider.value);
+    u.onend  = () => startListening();
+    u.onerror = () => startListening();
+    speechSynthesis.speak(u);
+  } else {
+    setTimeout(startListening, 1200);
+  }
+}
+
+// ── RECORDING + SPEECH RECOGNITION ──────────────────────────────
+function startListening() {
+  setRobot('listening');
+  doneBtn.disabled = false;
+  fillerCount = 0;
+  fillerCountEl.textContent = '0';
+
+  // MediaRecorder
+  try {
+    if (mediaStream) {
+      const at = mediaStream.getAudioTracks()[0];
+      if (at) {
+        const rec = new MediaRecorder(new MediaStream([at]));
+        const chunks = [];
+        rec.ondataavailable = e => { if(e.data.size>0) chunks.push(e.data); };
+        rec.onstop = () => window.audioBlobs.push(new Blob(chunks,{type:'audio/webm'}));
+        rec.start();
+        window.currentRecorder = rec;
+      }
+    }
+  } catch {}
+
+  // Speech recognition
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SR) {
+    const rec = new SR();
+    rec.continuous=true; rec.interimResults=true;
+    let finalT = '';
+    rec.onresult = ev => {
+      let interim = '';
+      for (let i=ev.resultIndex;i<ev.results.length;i++) {
+        if (ev.results[i].isFinal) finalT += ev.results[i][0].transcript+' ';
+        else interim = ev.results[i][0].transcript;
+      }
+      transcript.innerHTML = `<span style="color:#0A1628">${finalT}</span><span style="color:#8A9BB0">${interim}</span>`;
+      fillerCount = countFillers(finalT+interim);
+      fillerCountEl.textContent = fillerCount;
+      if (fillerCount > 5 && fillerCount % 3 === 0) showToast(`🗣️ ${fillerCount} filler words — try pausing!`,'#F5A623');
+    };
+    rec.onerror = () => {};
+    rec.start();
+    window.currentRecognition = rec;
+    window.currentFinalTranscript = () => finalT;
+  } else {
+    fallbackRow.classList.add('show');
+    window.currentFinalTranscript = () => fallbackInp.value;
+  }
+}
+
+async function submitAnswer(skipped=false) {
+  try { window.currentRecorder?.stop(); }    catch {}
+  try { window.currentRecognition?.stop(); } catch {}
+  clearInterval(qInterval);
+  fallbackRow.classList.remove('show');
+  fallbackInp.value = '';
+
+  const answer = skipped ? '[Skipped]' : (window.currentFinalTranscript()||'[No answer recorded]').trim();
+  window.transcripts.push(answer);
+  doneBtn.disabled = true;
+
+  // Nod on real answers
+  if (!skipped && answer.length > 20) setRobot('nodding');
+  else setRobot('thinking');
+
+  // Async per-answer DeepSeek analysis (non-blocking)
+  const qIdx = window.currentQ;
+  const qStr = window.questions[qIdx];
+  analyzeAnswer(qStr, answer).then(analysis => {
+    window.allAnswers.push({ questionIndex:qIdx, question:qStr, transcript:answer, analysis });
+  });
+
+  setTimeout(() => {
+    const next = window.currentQ + 1;
+    if (next < window.questions.length) askQuestion(next);
+    else endInterview();
+  }, 1600);
+}
+
+function endInterview() {
+  clearInterval(totalInterval);
+  clearInterval(qInterval);
+  if (postureDetector) postureDetector.stop();
+  if (mediaStream) mediaStream.getTracks().forEach(t=>t.stop());
+  if (speakingAC) try { speakingAC.close(); } catch {}
+  if (toneAC)     try { toneAC.close(); }     catch {}
+  speechSynthesis.cancel();
+
+  overlay.classList.remove('hide');
+  ovTitle.textContent = 'Interview complete! 🎉';
+  ovMsg.textContent   = 'Aria is preparing your report...';
+
+  // Wait for any pending analyses (up to 6s)
+  const waitAndRedirect = async () => {
+    await new Promise(res => setTimeout(res, 3000));
+    localStorage.setItem('interviewResults', JSON.stringify({
+      questions:         window.questions,
+      transcripts:       window.transcripts,
+      allAnswers:        window.allAnswers,
+      interviewType:     settings.interviewType,
+      interviewTypeText: settings.interviewTypeText,
+      roleLevelText:     settings.roleLevelText,
+      targetCompany:     settings.targetCompany,
+      targetCompanyText: settings.targetCompanyText,
+      duration:          parseInt(settings.duration)||15,
+      completedAt:       new Date().toISOString()
+    }));
+    window.location.href = 'results.html';
+  };
+  waitAndRedirect();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CONTROL BAR
+// ══════════════════════════════════════════════════════════════════
+doneBtn.addEventListener('click',   ()=>submitAnswer(false));
+skipBtn.addEventListener('click',   ()=>submitAnswer(true));
+fallbackDon.addEventListener('click',()=>submitAnswer(false));
+fallbackInp.addEventListener('keydown', e=>{ if(e.key==='Enter') submitAnswer(false); });
+closeStar.addEventListener('click', ()=>starTip.classList.remove('show'));
+
+endBtn.addEventListener('click', ()=>{
+  if (confirm('End the interview now?')) {
+    if (postureDetector) postureDetector.stop();
+    if (mediaStream) mediaStream.getTracks().forEach(t=>t.stop());
+    speechSynthesis.cancel();
+    window.location.href='index.html';
+  }
+});
+
+muteBtn.addEventListener('click', ()=>{
+  if (!mediaStream) return;
+  const t = mediaStream.getAudioTracks()[0];
+  if (t) {
+    isMuted = !isMuted;
+    t.enabled = !isMuted;
+    muteBtn.textContent = isMuted ? '🔇 Unmute' : '🎙️ Mute';
+    muteBtn.classList.toggle('active', isMuted);
+    micInd.classList.toggle('muted', isMuted);
+  }
+});
+
+camBtn.addEventListener('click', ()=>{
+  if (!mediaStream) return;
+  const t = mediaStream.getVideoTracks()[0];
+  if (t) {
+    isVideoOn = !isVideoOn;
+    t.enabled = isVideoOn;
+    camBtn.textContent = isVideoOn ? '📷 Camera' : '📷 Off';
+    camBtn.classList.toggle('active', !isVideoOn);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════════
+async function init() {
+  settings = JSON.parse(localStorage.getItem('interviewSettings') || '{}');
+  topbarType.textContent = settings.interviewTypeText || 'Interview';
+  if (settings.targetCompany && settings.targetCompany !== 'general') {
+    companyBadge.textContent = '🏢 ' + (settings.targetCompanyText || settings.targetCompany);
+    companyBadge.style.display = 'block';
+  }
+
+  const dur = parseInt(settings.duration) || 15;
+  numQuestions    = dur===5 ? 3 : dur===30 ? 8 : 6;
+  perQuestionTime = Math.floor((dur*60)/numQuestions);
+
+  if (settings.interviewType === 'behavioral') starTip.classList.add('show');
+
+  setRobot('thinking');
+  overlay.classList.remove('hide');
+  ovTitle.textContent = 'Aria is preparing your questions...';
+  ovMsg.textContent   = settings.resumeText && settings.resumeText.length > 50
+    ? 'Reading your resume and crafting personalised questions...'
+    : 'Crafting interview questions...';
+
+  localStorage.removeItem('postureData');
+
+  // Media + questions in parallel
+  await Promise.allSettled([initMedia(), generateQuestions()]);
+
+  overlay.classList.add('hide');
+  startTotal();
+  askQuestion(0);
+}
+
+init();
+</script>
+</body>
+</html>
