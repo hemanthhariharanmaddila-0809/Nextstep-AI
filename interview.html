@@ -823,9 +823,13 @@ async function startMedia() {
     mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
   } catch(e) {
     if (s.cameraId || s.micId) {
-      mediaStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
+      } catch(defaultErr) {
+        throw new Error(`Unable to access camera/microphone. Saved device selection may be stale and default devices also failed: ${defaultErr.message || defaultErr.name || defaultErr}`);
+      }
     } else {
-      throw e;
+      throw new Error(`Unable to access camera/microphone: ${e.message || e.name || e}`);
     }
   }
   window.globalStream = mediaStream;

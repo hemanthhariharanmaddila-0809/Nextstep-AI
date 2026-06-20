@@ -267,7 +267,10 @@
       previewStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: currentCameraId } }, audio: false });
       previewVideo.srcObject = previewStream;
       window.NextStepMediaPermissions.remember('true');
-    } catch(e) { console.warn('Camera preview unavailable:', e); }
+    } catch(e) {
+      if (e?.name === 'NotAllowedError' || e?.name === 'SecurityError') window.NextStepMediaPermissions.remember('false');
+      console.warn('Camera preview unavailable:', e);
+    }
   }
 
   cameraSelect.addEventListener('change', e => { if (e.target.value) { currentCameraId = e.target.value; startPreview(); } });
