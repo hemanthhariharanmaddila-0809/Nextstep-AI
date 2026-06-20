@@ -468,6 +468,7 @@
   <p id="ovMsg">Analysing your resume and crafting personalised questions.</p>
 </div>
 
+<script src="media-permissions.js"></script>
 <script src="config.js"></script>
 <script>
 'use strict';
@@ -536,6 +537,7 @@ window.currentFinalTranscript = () => '';
 window.globalStream = null;
 
 const FILLER_WORDS = ['um','uh','like','you know','basically','literally','actually','sort of','kind of','right'];
+const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 // Wait up to 8s for slower AI responses, then continue so students are not stuck on the final screen.
 const ANALYSIS_TIMEOUT_MS = 8000;
 // Each filler word lowers fallback delivery by 8 points so repeated fillers are visible without dominating the total score.
@@ -757,17 +759,32 @@ class PostureDetector {
 // MEDIA PERMISSION — ask ONCE, remember forever
 // ══════════════════════════════════════════════════════════════════
 async function initMedia() {
-  const stored = localStorage.getItem('micPermission');
-  if (stored === 'true') {
-    return startMedia();       // already granted — silent start
-  }
-  if (stored === 'false') {
-    // User previously denied — just show camera-off UI
+  const mediaPermissions = window.NextStepMediaPermissions;
+  const browserState = await mediaPermissions.getBrowserState();
+  if (browserState === 'granted') return tryStartMedia();
+  if (browserState === 'denied') {
+    mediaPermissions.remember('false');
     camOff.classList.add('show');
     return;
   }
+
+  const stored = mediaPermissions.getStored();
+  if (stored === 'true') return tryStartMedia();
+  if (stored === 'false') { camOff.classList.add('show'); return; }
+
   // First time — show modal
   showPermModal();
+}
+
+async function tryStartMedia() {
+  try {
+    await startMedia();
+    window.NextStepMediaPermissions.remember('true');
+  } catch(e) {
+    console.warn('Media unavailable:', e);
+    window.NextStepMediaPermissions.remember('false');
+    camOff.classList.add('show');
+  }
 }
 
 function showPermModal() {
@@ -786,18 +803,11 @@ function showPermModal() {
   document.body.appendChild(modal);
 
   document.getElementById('btnAllow').onclick = async () => {
-    try {
-      await startMedia();
-      localStorage.setItem('micPermission', 'true');
-    } catch(e) {
-      console.warn('Media denied:', e);
-      localStorage.setItem('micPermission', 'false');
-      camOff.classList.add('show');
-    }
+    await tryStartMedia();
     modal.remove();
   };
   document.getElementById('btnSkip').onclick = () => {
-    localStorage.setItem('micPermission', 'false');
+    window.NextStepMediaPermissions.remember('false');
     camOff.classList.add('show');
     modal.remove();
   };
@@ -809,7 +819,19 @@ async function startMedia() {
     video: s.cameraId ? { deviceId:{ exact:s.cameraId } } : true,
     audio: s.micId    ? { deviceId:{ exact:s.micId    } } : true
   };
-  mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+  } catch(e) {
+    if (s.cameraId || s.micId) {
+      try {
+        mediaStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
+      } catch(defaultErr) {
+        throw new Error(`Unable to access camera/microphone. Saved device selection may be stale and default devices also failed: ${defaultErr.message || defaultErr.name || defaultErr}`);
+      }
+    } else {
+      throw new Error(`Unable to access camera/microphone: ${e.message || e.name || e}`);
+    }
+  }
   window.globalStream = mediaStream;
   selfVideo.srcObject = mediaStream;
   selfVideo.style.display = 'block';
@@ -840,19 +862,27 @@ function setupSpeakingDetection() {
 // DEEPSEEK API
 // ══════════════════════════════════════════════════════════════════
 async function callDeepSeek(prompt, sys = '') {
-  const r = await fetch('https://api.deepseek.com/v1/chat/completions', {
+  const key = typeof DEEPSEEK_API_KEY === 'string' ? DEEPSEEK_API_KEY.trim() : '';
+  if (!key || key === 'YOUR_DEEPSEEK_API_KEY_HERE') {
+    throw new Error('DeepSeek API key is missing. Copy config.example.js to config.js and set DEEPSEEK_API_KEY.');
+  }
+
+  const headers = { 'Content-Type':'application/json', 'Authorization':'Bearer ' + key };
+  const r = await fetch(DEEPSEEK_API_URL, {
     method:'POST',
-    headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${DEEPSEEK_API_KEY}` },
+    headers,
     body: JSON.stringify({
       model:'deepseek-chat',
       messages: [...(sys?[{role:'system',content:sys}]:[]), {role:'user',content:prompt}],
       max_tokens:2000, temperature:0.7
     })
   });
+  if (!r.ok) throw new Error(`DeepSeek request failed with status ${r.status}`);
   const d = await r.json();
-  return d.choices[0].message.content;
+  const content = d?.choices?.[0]?.message?.content;
+  if (!content) throw new Error('DeepSeek response did not include message content');
+  return content;
 }
-
 function parseModelJSON(raw) {
   // Defensive cleanup: models sometimes wrap JSON in markdown despite explicit prompt rules.
   const cleaned = raw.replace(/```json|```/g,'').trim();

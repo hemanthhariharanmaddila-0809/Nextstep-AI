@@ -51,6 +51,7 @@ nextstep-ai/
 ├── setup.html          — Interview config, company selector, device check
 ├── interview.html      — Live interview with Pengu + all AI coaching features
 ├── results.html        — Feedback dashboard with posture timeline + PDF export
+├── media-permissions.js — Shared camera/microphone permission helpers
 ├── config.js           — Your API key (gitignored)
 ├── config.example.js   — Template for config.js
 └── README.md
