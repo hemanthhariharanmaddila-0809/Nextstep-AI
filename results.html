@@ -51,6 +51,32 @@
     /* CARDS */
     .card{background:var(--white);border:1px solid var(--border);border-radius:20px;padding:26px;box-shadow:0 2px 10px rgba(0,0,0,0.04);}
 
+    /* SUMMARY */
+    .summary-grid{display:grid;grid-template-columns:1.4fr 0.8fr;gap:18px;}
+    @media(max-width:760px){.summary-grid{grid-template-columns:1fr;}}
+    .summary-main{font-size:0.92rem;color:var(--text-mid);line-height:1.7;}
+    .readiness-card{border-top:3px solid var(--teal);}
+    .readiness-val{font-family:'Syne',sans-serif;font-size:1.35rem;font-weight:800;color:var(--teal);margin-bottom:8px;}
+    .assessment-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px;}
+    @media(max-width:680px){.assessment-grid{grid-template-columns:1fr;}}
+    .assessment-box{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:18px;}
+    .assessment-box label{display:block;font-size:0.65rem;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:7px;}
+    .assessment-box p{font-size:0.86rem;color:var(--text-mid);line-height:1.6;}
+    .ai-status{margin-top:14px;padding:12px 14px;border-radius:10px;background:rgba(245,166,35,0.08);border:1px solid rgba(245,166,35,0.22);color:#9A6400;font-size:0.82rem;line-height:1.55;}
+
+    /* CATEGORY SCORES */
+    .category-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+    @media(max-width:840px){.category-grid{grid-template-columns:repeat(2,1fr);}}
+    @media(max-width:520px){.category-grid{grid-template-columns:1fr;}}
+    .cat-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:0 2px 7px rgba(0,0,0,0.03);}
+    .cat-name{font-size:0.72rem;color:var(--text-light);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;font-weight:700;}
+    .cat-score{font-family:'Syne',sans-serif;font-weight:800;font-size:1.4rem;margin-bottom:8px;}
+    .cat-track{height:7px;background:var(--off-white);border-radius:10px;overflow:hidden;border:1px solid var(--border);}
+    .cat-fill{height:100%;border-radius:10px;}
+    .practice-list{list-style:none;display:flex;flex-direction:column;gap:10px;}
+    .practice-list li{font-size:0.88rem;color:var(--text-mid);line-height:1.55;padding-left:22px;position:relative;}
+    .practice-list li::before{content:'→';position:absolute;left:0;color:var(--teal);font-weight:800;}
+
     /* STRENGTHS */
     .sw-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
     @media(max-width:680px){.sw-grid{grid-template-columns:1fr;}}
@@ -224,6 +250,24 @@
 
   <div class="page" id="reportContent">
 
+    <!-- SUMMARY -->
+    <div class="section" id="summarySection">
+      <div class="sec-lbl">Overall interview summary</div>
+      <h2 class="sec-title">Performance Summary</h2>
+      <div class="summary-grid">
+        <div class="card summary-main" id="overallSummary"></div>
+        <div class="card readiness-card">
+          <div class="readiness-val" id="hiringReadiness">Loading...</div>
+          <p style="font-size:0.86rem;color:var(--text-mid);line-height:1.6;">Hiring readiness based on the full mock interview, delivery signals, and answer quality.</p>
+        </div>
+      </div>
+      <div class="assessment-grid">
+        <div class="assessment-box"><label>Communication analysis</label><p id="communicationAssessment"></p></div>
+        <div class="assessment-box"><label>Answer quality</label><p id="contentAssessment"></p></div>
+      </div>
+      <div id="aiStatus"></div>
+    </div>
+
     <!-- STRENGTHS -->
     <div class="section" id="swSection">
       <div class="sec-lbl">Performance overview</div>
@@ -232,6 +276,13 @@
         <div class="sw-card good"><h3>✓ What you did well</h3><ul class="sw-list" id="strengthsList"></ul></div>
         <div class="sw-card improve"><h3>→ Focus areas for next time</h3><ul class="sw-list" id="improvList"></ul></div>
       </div>
+    </div>
+
+    <!-- CATEGORY SCORES -->
+    <div class="section" id="scoreSection">
+      <div class="sec-lbl">Scoring breakdown</div>
+      <h2 class="sec-title">How your score was formed</h2>
+      <div class="category-grid" id="categoryGrid"></div>
     </div>
 
     <!-- QUESTION BREAKDOWN -->
@@ -274,6 +325,13 @@
       <div class="career-grid" id="careerGrid"></div>
     </div>
 
+    <!-- PRACTICE PLAN -->
+    <div class="section" id="practiceSection">
+      <div class="sec-lbl">What to practice next</div>
+      <h2 class="sec-title">Next practice plan</h2>
+      <div class="card"><ul class="practice-list" id="practicePlanList"></ul></div>
+    </div>
+
     <!-- DISCLAIMER -->
     <div class="section" id="discSection">
       <div class="disclaimer">
@@ -301,6 +359,13 @@
 <script>
 'use strict';
 const FILLER_WORDS = ['um','uh','like','you know','basically','literally','actually','sort of','kind of','right'];
+// Weights intentionally sum to 1.0 for the local fallback score and match the final AI prompt guidance.
+const SCORE_WEIGHTS = { answerQuality:0.55, completion:0.15, delivery:0.15, bodyLanguage:0.15 };
+const SCORE_WEIGHT_TOTAL = Object.values(SCORE_WEIGHTS).reduce((a,b)=>a+b,0);
+if (Math.abs(SCORE_WEIGHT_TOTAL - 1) > Number.EPSILON) throw new Error('Score weights must sum to 1.0');
+// Keep prompt payloads bounded for browser-side API cost and model context limits.
+const RESUME_TEXT_MAX_LENGTH = 2500;
+const ANSWER_TEXT_MAX_LENGTH = 1200;
 
 // ── Loading tips cycling ──────────────────────────────────────────
 const tips = ['Reviewing your answers...','Counting filler words...','Checking STAR structure...','Generating resume tips...','Analysing body language...','Almost done...'];
@@ -330,30 +395,134 @@ async function callDeepSeek(prompt, sys='') {
   return d.choices[0].message.content;
 }
 
-// ── Mock fallback ──────────────────────────────────────────────────
-function mockFB(results) {
-  const perQA = (results.allAnswers||[]);
+function parseModelJSON(raw) {
+  // Defensive cleanup: models sometimes wrap JSON in markdown despite explicit prompt rules.
+  const cleaned = raw.replace(/```json|```/g,'').trim();
+  if (!/^[\[{]/.test(cleaned) || !/[\]}]$/.test(cleaned)) throw new Error('Model response was not JSON');
+  return JSON.parse(cleaned);
+}
+
+function truncateText(text, maxLength) {
+  const value = String(text || '');
+  return value.length > maxLength ? value.substring(0, maxLength) + '…' : value;
+}
+
+// ── Data helpers and honest fallback ─────────────────────────────────
+function esc(v) {
+  const map = {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'};
+  return String(v ?? '').replace(/[&<>'"]/g, c => map[c] || c);
+}
+function arr(v) { return Array.isArray(v) ? v.filter(Boolean) : []; }
+function clampScore(v) { return Math.max(0, Math.min(100, Math.round(Number(v)||0))); }
+function isRealAnswer(t) { return t && !['[Skipped]','[No answer recorded]'].includes(t); }
+
+function getPostureSummary() {
+  const data = JSON.parse(localStorage.getItem('postureData')||'{}');
+  const history = data.history || [];
+  if (!history.length) return { available:false, finalPosture:0, finalEye:0, goodPosturePct:0, slouchEvents:0 };
   return {
-    overallScore: 72,
-    overallSummary: 'You showed solid communication and gave structured answers.',
-    strengths:    ['Clear and confident delivery','Good overall structure','Showed enthusiasm for the role'],
-    improvements: ['Add specific quantifiable examples','Reduce filler words','Expand on technical experience'],
-    questionFeedback: results.questions.map((_,i)=>{
-      const qa = perQA.find(a=>a.questionIndex===i);
+    available:true,
+    finalPosture: data.finalPosture || history[history.length-1]?.posture || 0,
+    finalEye: data.finalEye || history[history.length-1]?.eye || 0,
+    goodPosturePct: Math.round((history.filter(p=>p.posture>=70).length/history.length)*100),
+    slouchEvents: history.filter(p=>p.posture<55).length
+  };
+}
+
+function averageCategory(results, key, fallback=0) {
+  const vals = arr(results.allAnswers).map(a=>Number(a?.analysis?.categories?.[key])).filter(v=>Number.isFinite(v));
+  if (!vals.length) return fallback;
+  return clampScore(vals.reduce((a,b)=>a+b,0)/vals.length);
+}
+
+function localScore(results, totalFillers, postureSummary) {
+  const answered = arr(results.transcripts).filter(isRealAnswer).length;
+  const total = Math.max(1, arr(results.questions).length);
+  const completion = Math.round((answered/total)*100);
+  const fillerScore = clampScore(100 - totalFillers * 5);
+  const postureScore = postureSummary.available ? Math.round((postureSummary.finalPosture + postureSummary.finalEye) / 2) : 65;
+  const answerScores = arr(results.allAnswers).map(a=>Number(a?.analysis?.score)).filter(v=>Number.isFinite(v));
+  const answerQuality = answerScores.length ? clampScore(answerScores.reduce((a,b)=>a+b,0)/answerScores.length) : completion;
+  return clampScore(
+    answerQuality*SCORE_WEIGHTS.answerQuality +
+    completion*SCORE_WEIGHTS.completion +
+    fillerScore*SCORE_WEIGHTS.delivery +
+    postureScore*SCORE_WEIGHTS.bodyLanguage
+  );
+}
+
+function fallbackStrengths(results, totalFillers, postureSummary, answered, total) {
+  const strengths = [`Completed ${answered} of ${total} questions`];
+  strengths.push(totalFillers < 5 ? 'Kept filler words low during the session' : 'Captured interview transcripts for review');
+  strengths.push(postureSummary.available ? 'Recorded posture and eye-contact metrics' : 'Saved answers locally for follow-up practice');
+  return strengths;
+}
+
+function honestFallback(results, totalFillers, postureSummary) {
+  const answered = arr(results.transcripts).filter(isRealAnswer).length;
+  const total = Math.max(1, arr(results.questions).length);
+  const score = localScore(results, totalFillers, postureSummary);
+  const hasPerAnswer = arr(results.allAnswers).some(a=>a?.analysis?.summary || arr(a?.analysis?.strengths).length);
+  const categoryScores = {
+    relevance: averageCategory(results,'relevance',Math.round((answered/total)*100)),
+    clarity: averageCategory(results,'clarity',0),
+    structure: averageCategory(results,'structure',0),
+    specificity: averageCategory(results,'specificity',0),
+    confidence: averageCategory(results,'confidence',0),
+    technicalDepth: averageCategory(results,'technicalDepth',0),
+    delivery: averageCategory(results,'delivery',clampScore(100-totalFillers*5)),
+    bodyLanguage: postureSummary.available ? Math.round((postureSummary.finalPosture + postureSummary.finalEye) / 2) : 0
+  };
+
+  return {
+    aiUnavailable:true,
+    overallScore: score,
+    hiringReadiness: score>=80?'Strong practice performance':score>=60?'Developing readiness':'Needs more practice',
+    overallSummary: hasPerAnswer
+      ? 'DeepSeek final summary was unavailable, but some AI-generated answer feedback was captured and combined with real interview metrics.'
+      : 'No AI analysis is included because DeepSeek was unavailable; this report shows only real captured metrics from the session.',
+    communicationAssessment: `Answered ${answered} of ${total} questions with ${totalFillers} detected filler words.${postureSummary.available ? ` Final posture was ${postureSummary.finalPosture}% and eye contact was ${postureSummary.finalEye}%.` : ' Camera-based posture data was not available.'}`,
+    contentAssessment: hasPerAnswer ? 'Some answer-level AI analysis was captured; review each question card for specific coaching.' : 'No reliable AI content analysis was available. Use the transcript cards to manually review relevance, examples, structure, and missing details.',
+    categoryScores,
+    strengths: hasPerAnswer
+      ? arr(results.allAnswers).flatMap(a=>arr(a?.analysis?.strengths)).slice(0,3)
+      : fallbackStrengths(results, totalFillers, postureSummary, answered, total),
+    improvements: hasPerAnswer
+      ? arr(results.allAnswers).flatMap(a=>arr(a?.analysis?.weaknesses)).slice(0,3)
+      : ['Reconnect the AI service to generate detailed coaching', 'Review transcripts for specific examples and measurable outcomes', 'Practice answers using a clear situation-action-result structure'],
+    questionFeedback: arr(results.questions).map((q,i)=>{
+      const qa = arr(results.allAnswers).find(a=>a.questionIndex===i);
       return {
-        questionIndex: i,
-        score: qa?.analysis?.score || 65,
-        whatWentWell: qa?.analysis?.strengths?.[0] || 'You addressed the core of the question.',
-        whatToImprove: qa?.analysis?.weaknesses?.[0] || 'Add more specific examples.',
-        exampleBetterAnswer: qa?.analysis?.improvedAnswer || 'I can speak to that — for example, in my previous role I...'
+        questionIndex:i,
+        score: clampScore(qa?.analysis?.score || (isRealAnswer(results.transcripts[i]) ? 50 : 0)),
+        categories: qa?.analysis?.categories || {},
+        whatWentWell: arr(qa?.analysis?.strengths)[0] || (isRealAnswer(results.transcripts[i]) ? 'Answer was recorded and can be reviewed.' : 'No complete answer was recorded.'),
+        whatToImprove: arr(qa?.analysis?.weaknesses)[0] || 'AI coaching was unavailable; manually check relevance, structure, and specific examples.',
+        exampleBetterAnswer: qa?.analysis?.improvedAnswer || 'AI-generated stronger answer unavailable.',
+        missingDetails: arr(qa?.analysis?.missingDetails)
       };
     }),
-    resumeTips: ['Quantify achievements with numbers','Add a professional summary at the top','Use strong action verbs'],
-    careerAlternatives: [
-      {role:'Product Manager',   reason:'Your communication and structured thinking align well with PM work.'},
-      {role:'Business Analyst',  reason:'Your analytical approach suits this role.'},
-      {role:'Technical Recruiter',reason:'Your ability to discuss technical topics clearly is valuable.'}
-    ]
+    resumeTips: results.resumeText ? ['Compare each answer against your resume claims and add concrete project outcomes','Prepare one concise story for each major resume project','Quantify impact with numbers wherever possible'] : ['Upload a resume before the next session for resume-specific question and answer coaching'],
+    careerAlternatives: [],
+    practicePlan: ['Repeat questions with weak or missing answers','Add one metric or outcome to each answer','Use STAR for behavioral answers and a problem-approach-result flow for technical answers']
+  };
+}
+
+function normalizeFeedback(fb, results, totalFillers, postureSummary) {
+  fb = fb || {};
+  const fallback = honestFallback(results, totalFillers, postureSummary);
+  return {
+    ...fallback,
+    ...fb,
+    overallScore: clampScore(fb.overallScore ?? fallback.overallScore),
+    hiringReadiness: fb.hiringReadiness || fallback.hiringReadiness,
+    strengths: arr(fb.strengths).length ? arr(fb.strengths) : fallback.strengths,
+    improvements: arr(fb.improvements).length ? arr(fb.improvements) : fallback.improvements,
+    questionFeedback: arr(fb.questionFeedback).length ? arr(fb.questionFeedback) : fallback.questionFeedback,
+    resumeTips: arr(fb.resumeTips).length ? arr(fb.resumeTips) : fallback.resumeTips,
+    careerAlternatives: arr(fb.careerAlternatives),
+    practicePlan: arr(fb.practicePlan).length ? arr(fb.practicePlan) : fallback.practicePlan,
+    categoryScores: fb.categoryScores || fallback.categoryScores
   };
 }
 
@@ -376,40 +545,60 @@ function animScore(target, color) {
 
 // ── Build sections ────────────────────────────────────────────────
 function buildStats(results, totalFillers) {
-  const answered = results.transcripts.filter(t=>t!=='[Skipped]'&&t!=='[No answer recorded]').length;
+  const transcripts = arr(results.transcripts);
+  const answered = transcripts.filter(isRealAnswer).length;
   const fc = totalFillers>15?'bad':totalFillers>=8?'warn':'good';
   const comp = results.targetCompany&&results.targetCompany!=='general'
-    ? `<div class="stat-chip">Style: <span class="val">${results.targetCompanyText||results.targetCompany}</span></div>` : '';
+    ? `<div class="stat-chip">Style: <span class="val">${esc(results.targetCompanyText||results.targetCompany)}</span></div>` : '';
   document.getElementById('statChips').innerHTML=`
-    <div class="stat-chip">Answered: <span class="val">${answered}/${results.questions.length}</span></div>
+    <div class="stat-chip">Answered: <span class="val">${answered}/${arr(results.questions).length}</span></div>
     <div class="stat-chip ${fc}">Fillers: <span class="val">${totalFillers}</span></div>
     <div class="stat-chip">Duration: <span class="val">${results.duration} min</span></div>${comp}`;
 }
 
+function buildSummary(fb) {
+  document.getElementById('overallSummary').innerHTML = esc(fb.overallSummary || 'No summary available.');
+  document.getElementById('hiringReadiness').textContent = fb.hiringReadiness || 'Practice review';
+  document.getElementById('communicationAssessment').textContent = fb.communicationAssessment || 'Communication assessment unavailable.';
+  document.getElementById('contentAssessment').textContent = fb.contentAssessment || 'Answer quality assessment unavailable.';
+  document.getElementById('aiStatus').innerHTML = fb.aiUnavailable
+    ? '<div class="ai-status">⚠️ Final AI analysis was unavailable, so this report avoids fake dummy feedback and uses only captured interview data plus any completed per-answer analysis.</div>'
+    : '';
+}
+
 function buildStrengths(fb) {
-  document.getElementById('strengthsList').innerHTML = fb.strengths.map(s=>`<li><div class="ci">✓</div><span>${s}</span></li>`).join('');
-  document.getElementById('improvList').innerHTML    = fb.improvements.map(s=>`<li><div class="ci">→</div><span>${s}</span></li>`).join('');
+  document.getElementById('strengthsList').innerHTML = arr(fb.strengths).map(s=>`<li><div class="ci">✓</div><span>${esc(s)}</span></li>`).join('');
+  document.getElementById('improvList').innerHTML    = arr(fb.improvements).map(s=>`<li><div class="ci">→</div><span>${esc(s)}</span></li>`).join('');
+}
+
+function buildCategoryScores(fb) {
+  const labels = { relevance:'Relevance', clarity:'Clarity', structure:'Structure', specificity:'Specificity', confidence:'Confidence', technicalDepth:'Role depth', delivery:'Delivery', bodyLanguage:'Body language' };
+  const scores = fb.categoryScores || {};
+  document.getElementById('categoryGrid').innerHTML = Object.entries(labels).map(([key,label])=>{
+    const score = clampScore(scores[key]);
+    return `<div class="cat-card"><div class="cat-name">${label}</div><div class="cat-score" style="color:${sColor(score)}">${score}</div><div class="cat-track"><div class="cat-fill" style="width:${score}%;background:${sColor(score)}"></div></div></div>`;
+  }).join('');
 }
 
 function buildQCards(results, fb) {
   const c = document.getElementById('qCards'); c.innerHTML='';
-  results.questions.forEach((q,i)=>{
-    const qf = fb.questionFeedback.find(x=>x.questionIndex===i)||{score:65,whatWentWell:'',whatToImprove:'',exampleBetterAnswer:''};
+  arr(results.questions).forEach((q,i)=>{
+    const qf = arr(fb.questionFeedback).find(x=>x.questionIndex===i)||{score:65,whatWentWell:'',whatToImprove:'',exampleBetterAnswer:''};
     const div = document.createElement('div'); div.className='q-card';
     div.innerHTML=`
       <div class="q-card-hdr">
-        <div class="q-card-title">Q${i+1}: ${q.length>68?q.substring(0,68)+'...':q}</div>
-        <div class="sbadge ${sBadge(qf.score)}">${qf.score}/100</div>
+        <div class="q-card-title">Q${i+1}: ${esc(q.length>68?q.substring(0,68)+'...':q)}</div>
+        <div class="sbadge ${sBadge(clampScore(qf.score))}">${clampScore(qf.score)}/100</div>
         <div class="chev">▼</div>
       </div>
       <div class="q-card-body"><div class="q-inner">
-        <div class="q-box"><label>Question</label>${q}</div>
-        <div class="q-box"><label>Your answer</label>${results.transcripts[i]||'[No answer recorded]'}</div>
+        <div class="q-box"><label>Question</label>${esc(q)}</div>
+        <div class="q-box"><label>Your answer</label>${esc(arr(results.transcripts)[i]||'[No answer recorded]')}</div>
         <div class="q-two">
-          <div class="q-good-box"><label>✓ What went well</label>${qf.whatWentWell}</div>
-          <div class="q-imp-box"><label>→ What to improve</label>${qf.whatToImprove}</div>
+          <div class="q-good-box"><label>✓ What went well</label>${esc(qf.whatWentWell)}</div>
+          <div class="q-imp-box"><label>→ What to improve</label>${esc(qf.whatToImprove)}</div>
         </div>
-        <div class="q-ex-box"><label>💡 Stronger opening example</label>${qf.exampleBetterAnswer}</div>
+        <div class="q-ex-box"><label>💡 Stronger answer example</label>${esc(qf.exampleBetterAnswer)}</div>
       </div></div>`;
     div.querySelector('.q-card-hdr').addEventListener('click',()=>div.classList.toggle('open'));
     c.appendChild(div);
@@ -503,21 +692,29 @@ function buildPostureTimeline() {
 }
 
 function buildResumeTips(fb) {
-  document.getElementById('resumeGrid').innerHTML=fb.resumeTips.map((t,i)=>`
+  document.getElementById('resumeGrid').innerHTML=arr(fb.resumeTips).map((t,i)=>`
     <div class="resume-card">
       <div class="resume-num">${i+1}</div>
-      <div class="resume-text">${t}</div>
+      <div class="resume-text">${esc(t)}</div>
       <div style="font-size:0.76rem;color:var(--teal);font-weight:600;">Apply this →</div>
     </div>`).join('');
 }
 
 function buildCareer(fb) {
-  document.getElementById('careerGrid').innerHTML=fb.careerAlternatives.map(c=>`
+  const section = document.getElementById('careerSection');
+  const careers = arr(fb.careerAlternatives);
+  if (!careers.length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  document.getElementById('careerGrid').innerHTML=careers.map(c=>`
     <div class="career-card">
-      <div class="career-role">${c.role}</div>
-      <div class="career-reason">${c.reason}</div>
-      <a class="career-link" href="https://www.google.com/search?q=${encodeURIComponent(c.role+' jobs')}" target="_blank">Explore →</a>
+      <div class="career-role">${esc(c.role)}</div>
+      <div class="career-reason">${esc(c.reason)}</div>
+      <a class="career-link" href="https://www.google.com/search?q=${encodeURIComponent((c.role||'')+' jobs')}" target="_blank">Explore →</a>
     </div>`).join('');
+}
+
+function buildPracticePlan(fb) {
+  document.getElementById('practicePlanList').innerHTML = arr(fb.practicePlan).map(p=>`<li>${esc(p)}</li>`).join('');
 }
 
 // ── PDF Download (professional) ───────────────────────────────────
@@ -568,7 +765,7 @@ async function init() {
   updateStreak();
 
   // Filler analysis
-  const allText = results.transcripts.join(' ').toLowerCase();
+  const allText = arr(results.transcripts).join(' ').toLowerCase();
   const fillerCounts = {};
   FILLER_WORDS.forEach(w=>{
     const m=(allText.match(new RegExp('\\b'+w.replace(/ /g,'\\s+')+'\\b','gi'))||[]).length;
@@ -576,52 +773,83 @@ async function init() {
   });
   const totalFillers = Object.values(fillerCounts).reduce((a,b)=>a+b,0);
 
-  // Build per-question feedback from allAnswers if available
+  // Build rich context for DeepSeek using only real captured interview data.
   const perQA = results.allAnswers || [];
+  const postureSummary = getPostureSummary();
+  const answerAnalyses = perQA.map(a=>({
+    questionIndex:a.questionIndex,
+    question:a.question,
+    transcript:truncateText(a.transcript, ANSWER_TEXT_MAX_LENGTH),
+    analysis:{ ...a.analysis, improvedAnswer:truncateText(a?.analysis?.improvedAnswer, ANSWER_TEXT_MAX_LENGTH) }
+  }));
+  const qaBlock = arr(results.questions).map((q,i)=>({
+    questionIndex:i,
+    question:q,
+    answer:truncateText(arr(results.transcripts)[i]||'[No answer]', ANSWER_TEXT_MAX_LENGTH)
+  }));
+  const categoryFallback = honestFallback(results, totalFillers, postureSummary).categoryScores;
 
-  // Build DeepSeek overall feedback prompt
-  const qaBlock = results.questions.map((q,i)=>
-    `Q${i+1}: ${q}\nAnswer: ${results.transcripts[i]||'[No answer]'}`
-  ).join('\n\n');
+  const feedPrompt = `You are an expert career coach reviewing a student's complete mock interview.
+Return ONLY valid JSON, no markdown, no comments. Do not invent experiences not present in transcripts or resume.
 
-  const compNote = results.targetCompany&&results.targetCompany!=='general'
-    ? `\nThis was a ${results.targetCompanyText||results.targetCompany}-style interview.` : '';
+Interview context:
+- Type: ${results.interviewTypeText||'General'}
+- Candidate level: ${results.roleLevelText||'Entry Level'}
+- Difficulty: ${results.difficulty||'medium'}
+- Target company/style: ${results.targetCompanyText||'General'}
+- Answer analyses completed before report: ${results.answerAnalysisComplete ? 'yes' : 'partial or timed out'}
 
-  const feedPrompt = `You are an expert career coach reviewing a mock interview.
+Local delivery metrics:
+- Total filler words: ${totalFillers}
+- Filler counts: ${JSON.stringify(fillerCounts)}
+- Posture summary: ${JSON.stringify(postureSummary)}
 
-Interview type: ${results.interviewTypeText||'General'}
-Candidate level: ${results.roleLevelText||'Entry Level'}${compNote}
+Resume text, if provided:
+"""
+${truncateText(results.resumeText, RESUME_TEXT_MAX_LENGTH)}
+"""
 
-Questions and answers:
-${qaBlock}
+Questions and transcripts:
+${JSON.stringify(qaBlock)}
 
-Return ONLY valid JSON, no markdown:
-{"overallScore":<0-100>,"overallSummary":"<2-3 sentences>","strengths":["s1","s2","s3"],"improvements":["i1","i2","i3"],"questionFeedback":[{"questionIndex":0,"score":<0-100>,"whatWentWell":"<text>","whatToImprove":"<text>","exampleBetterAnswer":"<text>"}],"resumeTips":["t1","t2","t3"],"careerAlternatives":[{"role":"<title>","reason":"<1 sentence>"},{"role":"<title>","reason":"<1 sentence>"},{"role":"<title>","reason":"<1 sentence>"}]}`;
+Per-answer analysis already captured:
+${JSON.stringify(answerAnalyses)}
+
+Use this scoring guidance:
+- overallScore should be weighted roughly ${Math.round(SCORE_WEIGHTS.answerQuality*100)}% answer quality, ${Math.round(SCORE_WEIGHTS.completion*100)}% completion, ${Math.round(SCORE_WEIGHTS.delivery*100)}% delivery/fillers, ${Math.round(SCORE_WEIGHTS.bodyLanguage*100)}% body language.
+- categoryScores must include relevance, clarity, structure, specificity, confidence, technicalDepth, delivery, bodyLanguage.
+- Give clear student-friendly coaching, not generic praise.
+
+Return this exact JSON shape:
+{"overallScore":0,"hiringReadiness":"<Strong / Developing / Needs practice plus short reason>","overallSummary":"<3-4 sentence proper summary of the whole interview>","communicationAssessment":"<specific assessment of clarity, confidence, fillers, posture/eye contact>","contentAssessment":"<specific assessment of relevance, examples, structure, role depth>","categoryScores":{"relevance":0,"clarity":0,"structure":0,"specificity":0,"confidence":0,"technicalDepth":0,"delivery":0,"bodyLanguage":0},"strengths":["s1","s2","s3"],"improvements":["i1","i2","i3"],"questionFeedback":[{"questionIndex":0,"score":0,"categories":{"relevance":0,"clarity":0,"structure":0,"specificity":0,"confidence":0,"technicalDepth":0,"delivery":0},"whatWentWell":"<specific>","whatToImprove":"<specific>","exampleBetterAnswer":"<2-3 sentence stronger answer>","missingDetails":["missing detail"]}],"resumeTips":["resume/interview alignment tip"],"careerAlternatives":[{"role":"<title>","reason":"<1 sentence based on demonstrated skills>"}],"practicePlan":["specific next drill"]}`;
 
   let fb;
   try {
     const raw2 = await callDeepSeek(feedPrompt);
-    fb = JSON.parse(raw2.replace(/```json|```/g,'').trim());
-    if (!fb.overallScore) throw 0;
+    fb = parseModelJSON(raw2);
+    fb.categoryScores = { ...categoryFallback, ...(fb.categoryScores||{}) };
+    fb = normalizeFeedback(fb, results, totalFillers, postureSummary);
 
-    // Merge per-answer analysis into questionFeedback if available
+    // Merge detailed per-answer analysis into question feedback when final summary omitted details.
     if (perQA.length > 0) {
       fb.questionFeedback = fb.questionFeedback.map(qf=>{
         const qa = perQA.find(a=>a.questionIndex===qf.questionIndex);
         if (qa?.analysis) {
           return {
             ...qf,
-            score: Math.round((qf.score + (qa.analysis.score||qf.score)) / 2),
-            whatWentWell: qa.analysis.strengths?.[0] || qf.whatWentWell,
-            whatToImprove: qa.analysis.weaknesses?.[0] || qf.whatToImprove,
-            exampleBetterAnswer: qa.analysis.improvedAnswer || qf.exampleBetterAnswer
+            categories: qf.categories || qa.analysis.categories || {},
+            score: clampScore(qf.score ?? qa.analysis.score),
+            whatWentWell: qf.whatWentWell || arr(qa.analysis.strengths)[0] || '',
+            whatToImprove: qf.whatToImprove || arr(qa.analysis.weaknesses)[0] || '',
+            exampleBetterAnswer: qf.exampleBetterAnswer || qa.analysis.improvedAnswer || '',
+            missingDetails: arr(qf.missingDetails).length ? qf.missingDetails : arr(qa.analysis.missingDetails)
           };
         }
         return qf;
       });
     }
   } catch {
-    fb = mockFB(results);
+    fb = honestFallback(results, totalFillers, postureSummary);
   }
 
   clearInterval(tipIv);
@@ -635,12 +863,15 @@ Return ONLY valid JSON, no markdown:
 
   buildStats(results, totalFillers);
   animScore(fb.overallScore, sColor(fb.overallScore));
+  buildSummary(fb);
   buildStrengths(fb);
+  buildCategoryScores(fb);
   buildQCards(results, fb);
   buildFiller(fillerCounts, totalFillers);
   buildPostureTimeline();
   buildResumeTips(fb);
   buildCareer(fb);
+  buildPracticePlan(fb);
   setupCTAs(results, fb);
 
   // Scroll reveal
