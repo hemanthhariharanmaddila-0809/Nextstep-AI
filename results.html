@@ -366,7 +366,6 @@ if (Math.abs(SCORE_WEIGHT_TOTAL - 1) > Number.EPSILON) throw new Error('Score we
 // Keep prompt payloads bounded for browser-side API cost and model context limits.
 const RESUME_TEXT_MAX_LENGTH = 2500;
 const ANSWER_TEXT_MAX_LENGTH = 1200;
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 
 // ── Loading tips cycling ──────────────────────────────────────────
 const tips = ['Reviewing your answers...','Counting filler words...','Checking STAR structure...','Generating resume tips...','Analysing body language...','Almost done...'];
@@ -387,23 +386,15 @@ function updateStreak() {
 
 // ── DeepSeek ──────────────────────────────────────────────────────
 async function callDeepSeek(prompt, sys='') {
-  const key = typeof DEEPSEEK_API_KEY === 'string' ? DEEPSEEK_API_KEY.trim() : '';
-  if (!key || key === 'YOUR_DEEPSEEK_API_KEY_HERE') {
-    throw new Error('DeepSeek API key is missing. Copy config.example.js to config.js and set DEEPSEEK_API_KEY.');
-  }
-
-  const headers = {'Content-Type':'application/json', 'Authorization':'Bearer ' + key};
-  const r = await fetch(DEEPSEEK_API_URL,{
+  const r = await fetch('https://api.deepseek.com/v1/chat/completions',{
     method:'POST',
-    headers,
+    headers:{'Content-Type':'application/json','Authorization':`Bearer ${DEEPSEEK_API_KEY}`},
     body:JSON.stringify({model:'deepseek-chat',messages:[...(sys?[{role:'system',content:sys}]:[]),{role:'user',content:prompt}],max_tokens:3000,temperature:0.7})
   });
-  if (!r.ok) throw new Error(`DeepSeek request failed with status ${r.status}`);
   const d = await r.json();
-  const content = d?.choices?.[0]?.message?.content;
-  if (!content) throw new Error('DeepSeek response did not include message content');
-  return content;
+  return d.choices[0].message.content;
 }
+
 function parseModelJSON(raw) {
   // Defensive cleanup: models sometimes wrap JSON in markdown despite explicit prompt rules.
   const cleaned = raw.replace(/```json|```/g,'').trim();
