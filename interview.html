@@ -468,6 +468,7 @@
   <p id="ovMsg">Analysing your resume and crafting personalised questions.</p>
 </div>
 
+<script src="media-permissions.js"></script>
 <script src="config.js"></script>
 <script>
 'use strict';
@@ -536,7 +537,6 @@ window.currentFinalTranscript = () => '';
 window.globalStream = null;
 
 const FILLER_WORDS = ['um','uh','like','you know','basically','literally','actually','sort of','kind of','right'];
-const MEDIA_PERMISSION_KEY = 'mediaPermission';
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
 // Wait up to 8s for slower AI responses, then continue so students are not stuck on the final screen.
 const ANALYSIS_TIMEOUT_MS = 8000;
@@ -759,15 +759,16 @@ class PostureDetector {
 // MEDIA PERMISSION — ask ONCE, remember forever
 // ══════════════════════════════════════════════════════════════════
 async function initMedia() {
-  const browserState = await getBrowserMediaPermissionState();
+  const mediaPermissions = window.NextStepMediaPermissions;
+  const browserState = await mediaPermissions.getBrowserState();
   if (browserState === 'granted') return tryStartMedia();
   if (browserState === 'denied') {
-    rememberMediaPermission('false');
+    mediaPermissions.remember('false');
     camOff.classList.add('show');
     return;
   }
 
-  const stored = getStoredMediaPermission();
+  const stored = mediaPermissions.getStored();
   if (stored === 'true') return tryStartMedia();
   if (stored === 'false') { camOff.classList.add('show'); return; }
 
@@ -775,37 +776,13 @@ async function initMedia() {
   showPermModal();
 }
 
-function getStoredMediaPermission() {
-  return localStorage.getItem(MEDIA_PERMISSION_KEY) || localStorage.getItem('micPermission');
-}
-
-function rememberMediaPermission(value) {
-  localStorage.setItem(MEDIA_PERMISSION_KEY, value);
-  // Legacy key used by earlier sessions; keep it until existing localStorage data has migrated.
-  localStorage.setItem('micPermission', value);
-}
-
-async function queryPermission(name) {
-  if (!navigator.permissions?.query) return null;
-  try { return (await navigator.permissions.query({ name })).state; }
-  catch(e) { console.warn('Permission query failed:', name, e); return null; }
-}
-
-async function getBrowserMediaPermissionState() {
-  const states = await Promise.all([queryPermission('camera'), queryPermission('microphone')]);
-  if (states.includes('denied')) return 'denied';
-  if (states.every(s => s === 'granted')) return 'granted';
-  if (states.includes('prompt')) return 'prompt';
-  return null;
-}
-
 async function tryStartMedia() {
   try {
     await startMedia();
-    rememberMediaPermission('true');
+    window.NextStepMediaPermissions.remember('true');
   } catch(e) {
     console.warn('Media unavailable:', e);
-    rememberMediaPermission('false');
+    window.NextStepMediaPermissions.remember('false');
     camOff.classList.add('show');
   }
 }
@@ -830,7 +807,7 @@ function showPermModal() {
     modal.remove();
   };
   document.getElementById('btnSkip').onclick = () => {
-    rememberMediaPermission('false');
+    window.NextStepMediaPermissions.remember('false');
     camOff.classList.add('show');
     modal.remove();
   };
