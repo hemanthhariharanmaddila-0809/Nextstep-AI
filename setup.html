@@ -227,6 +227,7 @@
 
   function rememberMediaPermission(value) {
     localStorage.setItem(MEDIA_PERMISSION_KEY, value);
+    // Legacy key used by earlier sessions; keep it until existing localStorage data has migrated.
     localStorage.setItem('micPermission', value);
   }
 

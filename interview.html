@@ -781,6 +781,7 @@ function getStoredMediaPermission() {
 
 function rememberMediaPermission(value) {
   localStorage.setItem(MEDIA_PERMISSION_KEY, value);
+  // Legacy key used by earlier sessions; keep it until existing localStorage data has migrated.
   localStorage.setItem('micPermission', value);
 }
 
@@ -890,8 +891,7 @@ async function callDeepSeek(prompt, sys = '') {
     throw new Error('DeepSeek API key is missing. Copy config.example.js to config.js and set DEEPSEEK_API_KEY.');
   }
 
-  const headers = { 'Content-Type':'application/json' };
-  headers['Authorization'] = 'Bearer ' + key;
+  const headers = { 'Content-Type':'application/json', 'Authorization':'Bearer ' + key };
   const r = await fetch(DEEPSEEK_API_URL, {
     method:'POST',
     headers,
