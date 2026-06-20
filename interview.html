@@ -536,6 +536,8 @@ window.currentFinalTranscript = () => '';
 window.globalStream = null;
 
 const FILLER_WORDS = ['um','uh','like','you know','basically','literally','actually','sort of','kind of','right'];
+// User-experience cap for the final screen: wait briefly for AI, then continue with captured metrics.
+const ANALYSIS_TIMEOUT_MS = 8000;
 
 // ══════════════════════════════════════════════════════════════════
 // ROBOT STATE
@@ -903,6 +905,19 @@ Example: ["Tell me about your experience with X", "How did you approach Y at Z c
 }
 
 // ══════════════════════════════════════════════════════════════════
+// FILLER COUNT
+// ══════════════════════════════════════════════════════════════════
+function countFillers(text) {
+  let n=0;
+  const t=text.toLowerCase();
+  FILLER_WORDS.forEach(w => {
+    const m = t.match(new RegExp('\\b'+w.replace(/ /g,'\\s+')+'\\b','gi'));
+    if (m) n += m.length;
+  });
+  return n;
+}
+
+// ══════════════════════════════════════════════════════════════════
 // PER-ANSWER ANALYSIS (DeepSeek)
 // ══════════════════════════════════════════════════════════════════
 async function analyzeAnswer(question, answerText) {
@@ -946,6 +961,7 @@ JSON format exactly:
 
   try {
     const raw = await callDeepSeek(prompt);
+    // Defensive cleanup: models sometimes wrap JSON in markdown despite explicit prompt rules.
     const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
     parsed.score = Math.max(0, Math.min(100, Math.round(parsed.score || 0)));
     parsed.categories = parsed.categories || {};
@@ -997,20 +1013,6 @@ function showDiff(q) {
   diffBadge.innerHTML = `<span class="diff-badge ${cls}">${lv}</span>`;
 }
 
-// ══════════════════════════════════════════════════════════════════
-// FILLER COUNT
-// ══════════════════════════════════════════════════════════════════
-function countFillers(text) {
-  let n=0;
-  const t=text.toLowerCase();
-  FILLER_WORDS.forEach(w => {
-    const m = t.match(new RegExp('\\b'+w.replace(/ /g,'\\s+')+'\\b','gi'));
-    if (m) n += m.length;
-  });
-  return n;
-}
-
-// ══════════════════════════════════════════════════════════════════
 // SHOW TOAST
 // ══════════════════════════════════════════════════════════════════
 function showToast(msg, color='var(--teal)', ms=2500) {
@@ -1125,7 +1127,9 @@ async function submitAnswer(skipped=false) {
       };
     })
     .then(record => {
-      window.allAnswers[qIdx] = record;
+      const existingIdx = window.allAnswers.findIndex(a=>a.questionIndex===qIdx);
+      if (existingIdx >= 0) window.allAnswers[existingIdx] = record;
+      else window.allAnswers.push(record);
       return record;
     });
   window.answerAnalysisPromises.push(analysisPromise);
@@ -1154,7 +1158,6 @@ function endInterview() {
   const waitAndRedirect = async () => {
     // 8s is a user-experience cap: enough for the last answer analyses to settle on normal networks,
     // but short enough that a slow or unavailable AI API does not trap the student on this screen.
-    const ANALYSIS_TIMEOUT_MS = 8000;
     const timeout = new Promise(res => setTimeout(res, ANALYSIS_TIMEOUT_MS, 'timeout'));
     const analyses = Promise.allSettled(window.answerAnalysisPromises || []);
     const analysisStatus = await Promise.race([analyses, timeout]);

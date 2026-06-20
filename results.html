@@ -391,7 +391,8 @@ async function callDeepSeek(prompt, sys='') {
 
 // ── Data helpers and honest fallback ─────────────────────────────────
 function esc(v) {
-  return String(v ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const map = {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'};
+  return String(v ?? '').replace(/[&<>'"]/g, c => map[c] || c);
 }
 function arr(v) { return Array.isArray(v) ? v.filter(Boolean) : []; }
 function clampScore(v) { return Math.max(0, Math.min(100, Math.round(Number(v)||0))); }
@@ -807,6 +808,7 @@ Return this exact JSON shape:
   let fb;
   try {
     const raw2 = await callDeepSeek(feedPrompt);
+    // Defensive cleanup: models sometimes wrap JSON in markdown despite explicit prompt rules.
     fb = JSON.parse(raw2.replace(/```json|```/g,'').trim());
     fb.categoryScores = { ...categoryFallback, ...(fb.categoryScores||{}) };
     fb = normalizeFeedback(fb, results, totalFillers, postureSummary);
