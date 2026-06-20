@@ -227,7 +227,7 @@
 
   function rememberMediaPermission(value) {
     localStorage.setItem(MEDIA_PERMISSION_KEY, value);
-    localStorage.setItem('micPermission', value); // keep older interview pages in sync
+    localStorage.setItem('micPermission', value); // keep cached older pages in sync
   }
 
   async function queryPermission(name) {
