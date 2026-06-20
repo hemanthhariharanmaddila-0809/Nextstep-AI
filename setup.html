@@ -227,7 +227,7 @@
 
   function rememberMediaPermission(value) {
     localStorage.setItem(MEDIA_PERMISSION_KEY, value);
-    localStorage.setItem('micPermission', value); // keep cached older pages in sync
+    localStorage.setItem('micPermission', value);
   }
 
   async function queryPermission(name) {
@@ -247,8 +247,8 @@
     const stored = await syncStoredPermission();
     if (stored === 'true' || stored === 'false') return stored === 'true';
     try {
-      const t = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      t.getTracks().forEach(t => t.stop());
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      stream.getTracks().forEach(track => track.stop());
       rememberMediaPermission('true');
       return true;
     } catch {

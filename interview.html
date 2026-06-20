@@ -844,9 +844,11 @@ async function startMedia() {
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
   } catch(e) {
-    // Saved device IDs can become stale; retry defaults before treating permission as failed.
-    if (!s.cameraId && !s.micId) throw e;
-    mediaStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
+    if (s.cameraId || s.micId) {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
+    } else {
+      throw e;
+    }
   }
   window.globalStream = mediaStream;
   selfVideo.srcObject = mediaStream;
