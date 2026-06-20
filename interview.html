@@ -528,6 +528,7 @@ window.questions   = [];
 window.transcripts = [];
 window.audioBlobs  = [];
 window.allAnswers  = [];  // {question, transcript, analysis}
+window.answerAnalysisPromises = [];
 window.currentQ    = 0;
 window.currentRecorder    = null;
 window.currentRecognition = null;
@@ -905,22 +906,60 @@ Example: ["Tell me about your experience with X", "How did you approach Y at Z c
 // PER-ANSWER ANALYSIS (DeepSeek)
 // ══════════════════════════════════════════════════════════════════
 async function analyzeAnswer(question, answerText) {
-  if (!answerText || answerText.length < 10) {
-    return { score:0, strengths:['N/A'], weaknesses:['No answer given'], improvedAnswer:'' };
+  if (!answerText || answerText.length < 10 || ['[Skipped]','[No answer recorded]'].includes(answerText)) {
+    return {
+      score:0,
+      categories:{ relevance:0, clarity:0, structure:0, specificity:0, confidence:0, technicalDepth:0, delivery:0 },
+      strengths:['No complete answer was recorded.'],
+      weaknesses:['Answer the question fully before moving on.'],
+      missingDetails:['Specific examples, outcome, and reflection were not provided.'],
+      improvedAnswer:'',
+      summary:'The candidate did not provide enough content to evaluate this answer.'
+    };
   }
-  const prompt = `Analyze this interview answer and return ONLY valid JSON, no markdown.
+
+  const prompt = `You are an expert interview coach evaluating a student's mock interview answer.
+Return ONLY valid JSON, no markdown, no comments.
+
+Interview context:
+- Type: ${settings.interviewTypeText || 'General'}
+- Role level: ${settings.roleLevelText || 'Entry Level'}
+- Difficulty: ${settings.difficulty || 'medium'}
+- Target company/style: ${settings.targetCompanyText || 'General'}
 
 Question: ${question}
-Answer: ${answerText}
+Student answer transcript: ${answerText}
+Detected filler words in this answer: ${countFillers(answerText)}
 
-JSON format:
-{"score":0-100,"strengths":["point1","point2"],"weaknesses":["area1","area2"],"improvedAnswer":"A better version of this answer in 2-3 sentences"}`;
+Evaluate the student clearly and specifically. Do not invent experience that is not in the transcript.
+Score each category from 0-100:
+- relevance: whether the answer directly addresses the question
+- clarity: easy to follow, concise, clear wording
+- structure: logical flow; STAR structure for behavioral answers
+- specificity: concrete examples, numbers, tools, actions, outcomes
+- confidence: ownership, decisiveness, professional tone
+- technicalDepth: technical/product/role depth where relevant; otherwise judge role depth
+- delivery: transcript quality and filler-word impact
+
+JSON format exactly:
+{"score":0,"categories":{"relevance":0,"clarity":0,"structure":0,"specificity":0,"confidence":0,"technicalDepth":0,"delivery":0},"strengths":["specific point"],"weaknesses":["specific point"],"missingDetails":["specific missing detail"],"improvedAnswer":"A stronger 2-3 sentence answer using only plausible details from the transcript.","summary":"1 sentence direct coaching summary"}`;
 
   try {
     const raw = await callDeepSeek(prompt);
-    return JSON.parse(raw.replace(/```json|```/g,'').trim());
+    const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
+    parsed.score = Math.max(0, Math.min(100, Math.round(parsed.score || 0)));
+    parsed.categories = parsed.categories || {};
+    return parsed;
   } catch {
-    return { score: 60, strengths:['Answer was provided'], weaknesses:['Could be more structured'], improvedAnswer: answerText };
+    return {
+      score: 0,
+      categories:{ relevance:0, clarity:0, structure:0, specificity:0, confidence:0, technicalDepth:0, delivery:Math.max(0,100-countFillers(answerText)*8) },
+      strengths:['Answer transcript was captured for review.'],
+      weaknesses:['AI answer analysis was unavailable; review this transcript manually.'],
+      missingDetails:['Unable to verify detailed coaching points without AI analysis.'],
+      improvedAnswer: answerText,
+      summary:'AI analysis was unavailable for this answer.'
+    };
   }
 }
 
@@ -1072,12 +1111,26 @@ async function submitAnswer(skipped=false) {
   if (!skipped && answer.length > 20) setRobot('nodding');
   else setRobot('thinking');
 
-  // Async per-answer DeepSeek analysis (non-blocking)
+  // Start per-answer DeepSeek analysis and keep the promise for final results.
   const qIdx = window.currentQ;
   const qStr = window.questions[qIdx];
-  analyzeAnswer(qStr, answer).then(analysis => {
-    window.allAnswers.push({ questionIndex:qIdx, question:qStr, transcript:answer, analysis });
-  });
+  const analysisPromise = analyzeAnswer(qStr, answer)
+    .then(analysis => {
+      const record = { questionIndex:qIdx, question:qStr, transcript:answer, analysis };
+      window.allAnswers[qIdx] = record;
+      return record;
+    })
+    .catch(() => {
+      const record = {
+        questionIndex:qIdx,
+        question:qStr,
+        transcript:answer,
+        analysis:{ score:0, strengths:['AI analysis unavailable'], weaknesses:['Review this transcript manually'], improvedAnswer:answer }
+      };
+      window.allAnswers[qIdx] = record;
+      return record;
+    });
+  window.answerAnalysisPromises.push(analysisPromise);
 
   setTimeout(() => {
     const next = window.currentQ + 1;
@@ -1099,18 +1152,27 @@ function endInterview() {
   ovTitle.textContent = 'Interview complete! 🎉';
   ovMsg.textContent   = 'Aria is preparing your report...';
 
-  // Wait for any pending analyses (up to 6s)
+  // Wait for pending analyses so the report uses real answer feedback whenever possible.
   const waitAndRedirect = async () => {
-    await new Promise(res => setTimeout(res, 3000));
+    const timeout = new Promise(res => setTimeout(res, 8000, 'timeout'));
+    const analyses = Promise.allSettled(window.answerAnalysisPromises || []);
+    const analysisStatus = await Promise.race([analyses, timeout]);
+    const completedAnalyses = window.allAnswers.filter(Boolean).sort((a,b)=>a.questionIndex-b.questionIndex);
+
     localStorage.setItem('interviewResults', JSON.stringify({
       questions:         window.questions,
       transcripts:       window.transcripts,
-      allAnswers:        window.allAnswers,
+      allAnswers:        completedAnalyses,
+      answerAnalysisComplete: analysisStatus !== 'timeout',
       interviewType:     settings.interviewType,
       interviewTypeText: settings.interviewTypeText,
+      roleLevel:         settings.roleLevel,
       roleLevelText:     settings.roleLevelText,
+      difficulty:        settings.difficulty,
       targetCompany:     settings.targetCompany,
       targetCompanyText: settings.targetCompanyText,
+      resumeText:        settings.resumeText || '',
+      resumeFileName:    settings.resumeFileName || '',
       duration:          parseInt(settings.duration)||15,
       completedAt:       new Date().toISOString()
     }));
