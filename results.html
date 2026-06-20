@@ -253,7 +253,7 @@
     <!-- SUMMARY -->
     <div class="section" id="summarySection">
       <div class="sec-lbl">Overall interview summary</div>
-      <h2 class="sec-title">Clear coaching summary</h2>
+      <h2 class="sec-title">Performance Summary</h2>
       <div class="summary-grid">
         <div class="card summary-main" id="overallSummary"></div>
         <div class="card readiness-card">
@@ -359,6 +359,7 @@
 <script>
 'use strict';
 const FILLER_WORDS = ['um','uh','like','you know','basically','literally','actually','sort of','kind of','right'];
+const SCORE_WEIGHTS = { answerQuality:0.55, completion:0.15, delivery:0.15, bodyLanguage:0.15 };
 
 // ── Loading tips cycling ──────────────────────────────────────────
 const tips = ['Reviewing your answers...','Counting filler words...','Checking STAR structure...','Generating resume tips...','Analysing body language...','Almost done...'];
@@ -423,8 +424,12 @@ function localScore(results, totalFillers, postureSummary) {
   const postureScore = postureSummary.available ? Math.round((postureSummary.finalPosture + postureSummary.finalEye) / 2) : 65;
   const answerScores = arr(results.allAnswers).map(a=>Number(a?.analysis?.score)).filter(v=>Number.isFinite(v));
   const answerQuality = answerScores.length ? clampScore(answerScores.reduce((a,b)=>a+b,0)/answerScores.length) : completion;
-  // Match the final AI prompt: 55% answer quality, 15% completion, 15% delivery, 15% body language.
-  return clampScore(answerQuality*0.55 + completion*0.15 + fillerScore*0.15 + postureScore*0.15);
+  return clampScore(
+    answerQuality*SCORE_WEIGHTS.answerQuality +
+    completion*SCORE_WEIGHTS.completion +
+    fillerScore*SCORE_WEIGHTS.delivery +
+    postureScore*SCORE_WEIGHTS.bodyLanguage
+  );
 }
 
 function fallbackStrengths(results, totalFillers, postureSummary, answered, total) {
@@ -792,7 +797,7 @@ Per-answer analysis already captured:
 ${JSON.stringify(answerAnalyses)}
 
 Use this scoring guidance:
-- overallScore should be weighted roughly 55% answer quality, 15% completion, 15% delivery/fillers, 15% body language.
+- overallScore should be weighted roughly ${Math.round(SCORE_WEIGHTS.answerQuality*100)}% answer quality, ${Math.round(SCORE_WEIGHTS.completion*100)}% completion, ${Math.round(SCORE_WEIGHTS.delivery*100)}% delivery/fillers, ${Math.round(SCORE_WEIGHTS.bodyLanguage*100)}% body language.
 - categoryScores must include relevance, clarity, structure, specificity, confidence, technicalDepth, delivery, bodyLanguage.
 - Give clear student-friendly coaching, not generic praise.
 
@@ -814,7 +819,7 @@ Return this exact JSON shape:
           return {
             ...qf,
             categories: qf.categories || qa.analysis.categories || {},
-            score: clampScore(qf.score || qa.analysis.score),
+            score: clampScore(qf.score ?? qa.analysis.score),
             whatWentWell: qf.whatWentWell || arr(qa.analysis.strengths)[0] || '',
             whatToImprove: qf.whatToImprove || arr(qa.analysis.weaknesses)[0] || '',
             exampleBetterAnswer: qf.exampleBetterAnswer || qa.analysis.improvedAnswer || '',

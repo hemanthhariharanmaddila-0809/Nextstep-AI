@@ -1115,18 +1115,16 @@ async function submitAnswer(skipped=false) {
   const qIdx = window.currentQ;
   const qStr = window.questions[qIdx];
   const analysisPromise = analyzeAnswer(qStr, answer)
-    .then(analysis => {
-      const record = { questionIndex:qIdx, question:qStr, transcript:answer, analysis };
-      window.allAnswers[qIdx] = record;
-      return record;
-    })
+    .then(analysis => ({ questionIndex:qIdx, question:qStr, transcript:answer, analysis }))
     .catch(() => {
-      const record = {
+      return {
         questionIndex:qIdx,
         question:qStr,
         transcript:answer,
         analysis:{ score:0, strengths:['AI analysis unavailable'], weaknesses:['Review this transcript manually'], improvedAnswer:answer }
       };
+    })
+    .then(record => {
       window.allAnswers[qIdx] = record;
       return record;
     });
@@ -1154,7 +1152,9 @@ function endInterview() {
 
   // Wait for pending analyses so the report uses real answer feedback whenever possible.
   const waitAndRedirect = async () => {
-    const ANALYSIS_TIMEOUT_MS = 8000; // Give DeepSeek enough time without trapping the student on the completion screen.
+    // 8s is a user-experience cap: enough for the last answer analyses to settle on normal networks,
+    // but short enough that a slow or unavailable AI API does not trap the student on this screen.
+    const ANALYSIS_TIMEOUT_MS = 8000;
     const timeout = new Promise(res => setTimeout(res, ANALYSIS_TIMEOUT_MS, 'timeout'));
     const analyses = Promise.allSettled(window.answerAnalysisPromises || []);
     const analysisStatus = await Promise.race([analyses, timeout]);
