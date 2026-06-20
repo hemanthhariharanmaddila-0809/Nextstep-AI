@@ -216,6 +216,7 @@
     }
   });
 
+  const MEDIA_PERMISSION_KEY = 'mediaPermission';
   let previewStream = null, testStream = null, currentCameraId = null, currentMicId = null, isTesting = false, audioContext = null;
   const cameraSelect = document.getElementById('cameraSelect');
   const micSelect = document.getElementById('micSelect');
@@ -224,8 +225,40 @@
   const micLevelFill = document.getElementById('micLevelFill');
   const joinBtn = document.getElementById('joinBtn');
 
+  function rememberMediaPermission(value) {
+    localStorage.setItem(MEDIA_PERMISSION_KEY, value);
+    localStorage.setItem('micPermission', value); // keep older interview pages in sync
+  }
+
+  async function queryPermission(name) {
+    if (!navigator.permissions?.query) return null;
+    try { return (await navigator.permissions.query({ name })).state; }
+    catch { return null; }
+  }
+
+  async function syncStoredPermission() {
+    const states = await Promise.all([queryPermission('camera'), queryPermission('microphone')]);
+    if (states.includes('denied')) { rememberMediaPermission('false'); return 'false'; }
+    if (states.every(s => s === 'granted')) { rememberMediaPermission('true'); return 'true'; }
+    return localStorage.getItem(MEDIA_PERMISSION_KEY) || localStorage.getItem('micPermission');
+  }
+
+  async function ensureDevicePermission() {
+    const stored = await syncStoredPermission();
+    if (stored === 'true' || stored === 'false') return stored === 'true';
+    try {
+      const t = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      t.getTracks().forEach(t => t.stop());
+      rememberMediaPermission('true');
+      return true;
+    } catch {
+      rememberMediaPermission('false');
+      return false;
+    }
+  }
+
   async function getDevices() {
-    try { const t = await navigator.mediaDevices.getUserMedia({ video: true, audio: true }); t.getTracks().forEach(t => t.stop()); } catch {}
+    await ensureDevicePermission();
     const devices = await navigator.mediaDevices.enumerateDevices();
     cameraSelect.innerHTML = '<option value="">Select Camera...</option>';
     micSelect.innerHTML = '<option value="">Select Microphone...</option>';
@@ -240,7 +273,11 @@
   async function startPreview() {
     if (previewStream) previewStream.getTracks().forEach(t => t.stop());
     if (!currentCameraId) return;
-    try { previewStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: currentCameraId } }, audio: false }); previewVideo.srcObject = previewStream; } catch {}
+    try {
+      previewStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: currentCameraId } }, audio: false });
+      previewVideo.srcObject = previewStream;
+      rememberMediaPermission('true');
+    } catch {}
   }
 
   cameraSelect.addEventListener('change', e => { if (e.target.value) { currentCameraId = e.target.value; startPreview(); } });
@@ -257,13 +294,17 @@
     }
     try {
       testStream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: currentMicId } } });
+      rememberMediaPermission('true');
       audioContext = new (window.AudioContext || window.webkitAudioContext)();
       const src = audioContext.createMediaStreamSource(testStream);
       const an = audioContext.createAnalyser(); an.fftSize = 256; src.connect(an);
       const data = new Uint8Array(an.frequencyBinCount);
       function tick() { if (!an) return; an.getByteFrequencyData(data); let s = 0; data.forEach(v => s += v); micLevelFill.style.width = Math.min(100, (s / data.length / 255) * 100) + '%'; if (isTesting) requestAnimationFrame(tick); }
       audioContext.resume(); isTesting = true; tick(); testMicBtn.textContent = 'Stop Test';
-    } catch { alert('Cannot access microphone'); }
+    } catch {
+      rememberMediaPermission('false');
+      alert('Cannot access microphone');
+    }
   }
 
   testMicBtn.addEventListener('click', testMicrophone);
