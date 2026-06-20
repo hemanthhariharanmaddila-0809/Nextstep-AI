@@ -1154,7 +1154,8 @@ function endInterview() {
 
   // Wait for pending analyses so the report uses real answer feedback whenever possible.
   const waitAndRedirect = async () => {
-    const timeout = new Promise(res => setTimeout(res, 8000, 'timeout'));
+    const ANALYSIS_TIMEOUT_MS = 8000; // Give DeepSeek enough time without trapping the student on the completion screen.
+    const timeout = new Promise(res => setTimeout(res, ANALYSIS_TIMEOUT_MS, 'timeout'));
     const analyses = Promise.allSettled(window.answerAnalysisPromises || []);
     const analysisStatus = await Promise.race([analyses, timeout]);
     const completedAnalyses = window.allAnswers.filter(Boolean).sort((a,b)=>a.questionIndex-b.questionIndex);

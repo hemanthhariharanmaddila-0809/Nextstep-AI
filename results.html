@@ -423,7 +423,15 @@ function localScore(results, totalFillers, postureSummary) {
   const postureScore = postureSummary.available ? Math.round((postureSummary.finalPosture + postureSummary.finalEye) / 2) : 65;
   const answerScores = arr(results.allAnswers).map(a=>Number(a?.analysis?.score)).filter(v=>Number.isFinite(v));
   const answerQuality = answerScores.length ? clampScore(answerScores.reduce((a,b)=>a+b,0)/answerScores.length) : completion;
+  // Match the final AI prompt: 55% answer quality, 15% completion, 15% delivery, 15% body language.
   return clampScore(answerQuality*0.55 + completion*0.15 + fillerScore*0.15 + postureScore*0.15);
+}
+
+function fallbackStrengths(results, totalFillers, postureSummary, answered, total) {
+  const strengths = [`Completed ${answered} of ${total} questions`];
+  strengths.push(totalFillers < 5 ? 'Kept filler words low during the session' : 'Captured interview transcripts for review');
+  strengths.push(postureSummary.available ? 'Recorded posture and eye-contact metrics' : 'Saved answers locally for follow-up practice');
+  return strengths;
 }
 
 function honestFallback(results, totalFillers, postureSummary) {
@@ -454,7 +462,7 @@ function honestFallback(results, totalFillers, postureSummary) {
     categoryScores,
     strengths: hasPerAnswer
       ? arr(results.allAnswers).flatMap(a=>arr(a?.analysis?.strengths)).slice(0,3)
-      : [`Completed ${answered} of ${total} questions`, totalFillers < 5 ? 'Used very few filler words' : 'Interview transcript was captured for review', postureSummary.available ? 'Body-language metrics were recorded' : 'Answers were saved locally'],
+      : fallbackStrengths(results, totalFillers, postureSummary, answered, total),
     improvements: hasPerAnswer
       ? arr(results.allAnswers).flatMap(a=>arr(a?.analysis?.weaknesses)).slice(0,3)
       : ['Reconnect the AI service to generate detailed coaching', 'Review transcripts for specific examples and measurable outcomes', 'Practice answers using a clear situation-action-result structure'],
