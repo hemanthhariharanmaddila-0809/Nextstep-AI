@@ -823,12 +823,7 @@ async function startMedia() {
     mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
   } catch(e) {
     if (s.cameraId || s.micId) {
-      try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
-      } catch(defaultErr) {
-        console.warn('Default media fallback failed:', defaultErr);
-        throw defaultErr;
-      }
+      mediaStream = await navigator.mediaDevices.getUserMedia({ video:true, audio:true });
     } else {
       throw e;
     }

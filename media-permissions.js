@@ -6,7 +6,7 @@
 
   function remember(value) {
     localStorage.setItem(MEDIA_PERMISSION_KEY, value);
-    // Legacy key used by earlier sessions; keep it until existing localStorage data has migrated.
+    // Legacy key used by earlier sessions.
     localStorage.setItem(LEGACY_MEDIA_PERMISSION_KEY, value);
   }
 
