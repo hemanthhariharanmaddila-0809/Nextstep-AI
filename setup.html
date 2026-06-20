@@ -233,7 +233,7 @@
   async function queryPermission(name) {
     if (!navigator.permissions?.query) return null;
     try { return (await navigator.permissions.query({ name })).state; }
-    catch { return null; }
+    catch(e) { console.warn('Permission query failed:', name, e); return null; }
   }
 
   async function syncStoredPermission() {
@@ -277,7 +277,7 @@
       previewStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: currentCameraId } }, audio: false });
       previewVideo.srcObject = previewStream;
       rememberMediaPermission('true');
-    } catch {}
+    } catch(e) { console.warn('Camera preview unavailable:', e); }
   }
 
   cameraSelect.addEventListener('change', e => { if (e.target.value) { currentCameraId = e.target.value; startPreview(); } });
