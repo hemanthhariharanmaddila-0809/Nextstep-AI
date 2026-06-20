@@ -851,6 +851,11 @@ async function callDeepSeek(prompt, sys = '') {
   return d.choices[0].message.content;
 }
 
+function parseModelJSON(raw) {
+  // Defensive cleanup: models sometimes wrap JSON in markdown despite explicit prompt rules.
+  return JSON.parse(raw.replace(/```json|```/g,'').trim());
+}
+
 // ══════════════════════════════════════════════════════════════════
 // QUESTION GENERATION — BASED ON ACTUAL RESUME TEXT
 // ══════════════════════════════════════════════════════════════════
@@ -961,8 +966,7 @@ JSON format exactly:
 
   try {
     const raw = await callDeepSeek(prompt);
-    // Defensive cleanup: models sometimes wrap JSON in markdown despite explicit prompt rules.
-    const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
+    const parsed = parseModelJSON(raw);
     parsed.score = Math.max(0, Math.min(100, Math.round(parsed.score || 0)));
     parsed.categories = parsed.categories || {};
     return parsed;
@@ -1158,8 +1162,8 @@ function endInterview() {
   const waitAndRedirect = async () => {
     // 8s is a user-experience cap: enough for the last answer analyses to settle on normal networks,
     // but short enough that a slow or unavailable AI API does not trap the student on this screen.
-    const timeout = new Promise(res => setTimeout(res, ANALYSIS_TIMEOUT_MS, 'timeout'));
-    const analyses = Promise.allSettled(window.answerAnalysisPromises || []);
+    const timeout = new Promise(res => setTimeout(res, ANALYSIS_TIMEOUT_MS, { timedOut:true }));
+    const analyses = Promise.allSettled(window.answerAnalysisPromises || []).then(results => ({ timedOut:false, results }));
     const analysisStatus = await Promise.race([analyses, timeout]);
     const completedAnalyses = window.allAnswers.filter(Boolean).sort((a,b)=>a.questionIndex-b.questionIndex);
 
@@ -1167,7 +1171,7 @@ function endInterview() {
       questions:         window.questions,
       transcripts:       window.transcripts,
       allAnswers:        completedAnalyses,
-      answerAnalysisComplete: analysisStatus !== 'timeout',
+      answerAnalysisComplete: !analysisStatus.timedOut,
       interviewType:     settings.interviewType,
       interviewTypeText: settings.interviewTypeText,
       roleLevel:         settings.roleLevel,

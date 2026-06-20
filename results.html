@@ -359,6 +359,7 @@
 <script>
 'use strict';
 const FILLER_WORDS = ['um','uh','like','you know','basically','literally','actually','sort of','kind of','right'];
+// Weights intentionally sum to 1.0 for the local fallback score and match the final AI prompt guidance.
 const SCORE_WEIGHTS = { answerQuality:0.55, completion:0.15, delivery:0.15, bodyLanguage:0.15 };
 
 // ── Loading tips cycling ──────────────────────────────────────────
@@ -387,6 +388,11 @@ async function callDeepSeek(prompt, sys='') {
   });
   const d = await r.json();
   return d.choices[0].message.content;
+}
+
+function parseModelJSON(raw) {
+  // Defensive cleanup: models sometimes wrap JSON in markdown despite explicit prompt rules.
+  return JSON.parse(raw.replace(/```json|```/g,'').trim());
 }
 
 // ── Data helpers and honest fallback ─────────────────────────────────
@@ -461,7 +467,7 @@ function honestFallback(results, totalFillers, postureSummary) {
     overallScore: score,
     hiringReadiness: score>=80?'Strong practice performance':score>=60?'Developing readiness':'Needs more practice',
     overallSummary: hasPerAnswer
-      ? 'DeepSeek final summary was unavailable, so this report combines captured answer-level feedback with real local interview metrics.'
+      ? 'DeepSeek final summary was unavailable, so this report combines captured answer-level feedback with real captured interview metrics.'
       : 'DeepSeek analysis was unavailable, so this report avoids fake coaching and shows only real captured metrics from the session.',
     communicationAssessment: `Answered ${answered} of ${total} questions with ${totalFillers} detected filler words.${postureSummary.available ? ` Final posture was ${postureSummary.finalPosture}% and eye contact was ${postureSummary.finalEye}%.` : ' Camera-based posture data was not available.'}`,
     contentAssessment: hasPerAnswer ? 'Some answer-level AI analysis was captured; review each question card for specific coaching.' : 'No reliable AI content analysis was available. Use the transcript cards to manually review relevance, examples, structure, and missing details.',
@@ -808,8 +814,7 @@ Return this exact JSON shape:
   let fb;
   try {
     const raw2 = await callDeepSeek(feedPrompt);
-    // Defensive cleanup: models sometimes wrap JSON in markdown despite explicit prompt rules.
-    fb = JSON.parse(raw2.replace(/```json|```/g,'').trim());
+    fb = parseModelJSON(raw2);
     fb.categoryScores = { ...categoryFallback, ...(fb.categoryScores||{}) };
     fb = normalizeFeedback(fb, results, totalFillers, postureSummary);
 
