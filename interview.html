@@ -536,8 +536,10 @@ window.currentFinalTranscript = () => '';
 window.globalStream = null;
 
 const FILLER_WORDS = ['um','uh','like','you know','basically','literally','actually','sort of','kind of','right'];
-// User-experience cap for the final screen: wait briefly for AI, then continue with captured metrics.
+// Wait up to 8s for slower AI responses, then continue so students are not stuck on the final screen.
 const ANALYSIS_TIMEOUT_MS = 8000;
+// Each filler word lowers fallback delivery by 8 points so repeated fillers are visible without dominating the total score.
+const FILLER_PENALTY_PER_WORD = 8;
 
 // ══════════════════════════════════════════════════════════════════
 // ROBOT STATE
@@ -853,7 +855,9 @@ async function callDeepSeek(prompt, sys = '') {
 
 function parseModelJSON(raw) {
   // Defensive cleanup: models sometimes wrap JSON in markdown despite explicit prompt rules.
-  return JSON.parse(raw.replace(/```json|```/g,'').trim());
+  const cleaned = raw.replace(/```json|```/g,'').trim();
+  if (!/^[\[{]/.test(cleaned) || !/[\]}]$/.test(cleaned)) throw new Error('Model response was not JSON');
+  return JSON.parse(cleaned);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -973,7 +977,7 @@ JSON format exactly:
   } catch {
     return {
       score: 0,
-      categories:{ relevance:0, clarity:0, structure:0, specificity:0, confidence:0, technicalDepth:0, delivery:Math.max(0,100-countFillers(answerText)*8) },
+      categories:{ relevance:0, clarity:0, structure:0, specificity:0, confidence:0, technicalDepth:0, delivery:Math.max(0,100-countFillers(answerText)*FILLER_PENALTY_PER_WORD) },
       strengths:['Answer transcript was captured for review.'],
       weaknesses:['AI answer analysis was unavailable; review this transcript manually.'],
       missingDetails:['Unable to verify detailed coaching points without AI analysis.'],
@@ -1158,10 +1162,7 @@ function endInterview() {
   ovTitle.textContent = 'Interview complete! 🎉';
   ovMsg.textContent   = 'Aria is preparing your report...';
 
-  // Wait for pending analyses so the report uses real answer feedback whenever possible.
   const waitAndRedirect = async () => {
-    // 8s is a user-experience cap: enough for the last answer analyses to settle on normal networks,
-    // but short enough that a slow or unavailable AI API does not trap the student on this screen.
     const timeout = new Promise(res => setTimeout(res, ANALYSIS_TIMEOUT_MS, { timedOut:true }));
     const analyses = Promise.allSettled(window.answerAnalysisPromises || []).then(results => ({ timedOut:false, results }));
     const analysisStatus = await Promise.race([analyses, timeout]);

@@ -361,6 +361,11 @@
 const FILLER_WORDS = ['um','uh','like','you know','basically','literally','actually','sort of','kind of','right'];
 // Weights intentionally sum to 1.0 for the local fallback score and match the final AI prompt guidance.
 const SCORE_WEIGHTS = { answerQuality:0.55, completion:0.15, delivery:0.15, bodyLanguage:0.15 };
+const SCORE_WEIGHT_TOTAL = Object.values(SCORE_WEIGHTS).reduce((a,b)=>a+b,0);
+if (Math.abs(SCORE_WEIGHT_TOTAL - 1) > Number.EPSILON) throw new Error('Score weights must sum to 1.0');
+// Keep prompt payloads bounded for browser-side API cost and model context limits.
+const RESUME_TEXT_MAX_LENGTH = 2500;
+const ANSWER_TEXT_MAX_LENGTH = 1200;
 
 // ── Loading tips cycling ──────────────────────────────────────────
 const tips = ['Reviewing your answers...','Counting filler words...','Checking STAR structure...','Generating resume tips...','Analysing body language...','Almost done...'];
@@ -392,7 +397,14 @@ async function callDeepSeek(prompt, sys='') {
 
 function parseModelJSON(raw) {
   // Defensive cleanup: models sometimes wrap JSON in markdown despite explicit prompt rules.
-  return JSON.parse(raw.replace(/```json|```/g,'').trim());
+  const cleaned = raw.replace(/```json|```/g,'').trim();
+  if (!/^[\[{]/.test(cleaned) || !/[\]}]$/.test(cleaned)) throw new Error('Model response was not JSON');
+  return JSON.parse(cleaned);
+}
+
+function truncateText(text, maxLength) {
+  const value = String(text || '');
+  return value.length > maxLength ? value.substring(0, maxLength) + '…' : value;
 }
 
 // ── Data helpers and honest fallback ─────────────────────────────────
@@ -467,8 +479,8 @@ function honestFallback(results, totalFillers, postureSummary) {
     overallScore: score,
     hiringReadiness: score>=80?'Strong practice performance':score>=60?'Developing readiness':'Needs more practice',
     overallSummary: hasPerAnswer
-      ? 'DeepSeek final summary was unavailable, so this report combines captured answer-level feedback with real captured interview metrics.'
-      : 'DeepSeek analysis was unavailable, so this report avoids fake coaching and shows only real captured metrics from the session.',
+      ? 'DeepSeek final summary was unavailable, but some AI-generated answer feedback was captured and combined with real interview metrics.'
+      : 'No AI analysis is included because DeepSeek was unavailable; this report shows only real captured metrics from the session.',
     communicationAssessment: `Answered ${answered} of ${total} questions with ${totalFillers} detected filler words.${postureSummary.available ? ` Final posture was ${postureSummary.finalPosture}% and eye contact was ${postureSummary.finalEye}%.` : ' Camera-based posture data was not available.'}`,
     contentAssessment: hasPerAnswer ? 'Some answer-level AI analysis was captured; review each question card for specific coaching.' : 'No reliable AI content analysis was available. Use the transcript cards to manually review relevance, examples, structure, and missing details.',
     categoryScores,
@@ -767,13 +779,13 @@ async function init() {
   const answerAnalyses = perQA.map(a=>({
     questionIndex:a.questionIndex,
     question:a.question,
-    transcript:a.transcript,
-    analysis:a.analysis
+    transcript:truncateText(a.transcript, ANSWER_TEXT_MAX_LENGTH),
+    analysis:{ ...a.analysis, improvedAnswer:truncateText(a?.analysis?.improvedAnswer, ANSWER_TEXT_MAX_LENGTH) }
   }));
   const qaBlock = arr(results.questions).map((q,i)=>({
     questionIndex:i,
     question:q,
-    answer:arr(results.transcripts)[i]||'[No answer]'
+    answer:truncateText(arr(results.transcripts)[i]||'[No answer]', ANSWER_TEXT_MAX_LENGTH)
   }));
   const categoryFallback = honestFallback(results, totalFillers, postureSummary).categoryScores;
 
@@ -794,7 +806,7 @@ Local delivery metrics:
 
 Resume text, if provided:
 """
-${(results.resumeText||'').substring(0,2500)}
+${truncateText(results.resumeText, RESUME_TEXT_MAX_LENGTH)}
 """
 
 Questions and transcripts:
