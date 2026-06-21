@@ -537,7 +537,7 @@ window.currentFinalTranscript = () => '';
 window.globalStream = null;
 
 const FILLER_WORDS = ['um','uh','like','you know','basically','literally','actually','sort of','kind of','right'];
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 // Wait up to 8s for slower AI responses, then continue so students are not stuck on the final screen.
 const ANALYSIS_TIMEOUT_MS = 8000;
 // Each filler word lowers fallback delivery by 8 points so repeated fillers are visible without dominating the total score.
@@ -859,28 +859,41 @@ function setupSpeakingDetection() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// DEEPSEEK API
+// GROQ API
 // ══════════════════════════════════════════════════════════════════
+function getModelBasedOnInterviewType() {
+  const settings = JSON.parse(localStorage.getItem('interviewSettings') || '{}');
+  const interviewType = settings.interviewType || 'general';
+  
+  // Use Llama 3.3 70B for technical interviews, Llama 4 Maverick for others
+  return interviewType === 'technical' ? 'llama-3.3-70b-versatile' : 'llama-4-maverick';
+}
+
 async function callDeepSeek(prompt, sys = '') {
-  const key = typeof DEEPSEEK_API_KEY === 'string' ? DEEPSEEK_API_KEY.trim() : '';
-  if (!key || key === 'YOUR_DEEPSEEK_API_KEY_HERE') {
-    throw new Error('DeepSeek API key is missing. Copy config.example.js to config.js and set DEEPSEEK_API_KEY.');
+  const key = typeof GROQ_API_KEY === 'string' ? GROQ_API_KEY.trim() : '';
+  if (!key || key === 'YOUR_GROQ_API_KEY_HERE') {
+    throw new Error('Groq API key is missing. Update config.js with GROQ_API_KEY.');
   }
 
+  const model = getModelBasedOnInterviewType();
   const headers = { 'Content-Type':'application/json', 'Authorization':'Bearer ' + key };
-  const r = await fetch(DEEPSEEK_API_URL, {
+  const r = await fetch(GROQ_API_URL, {
     method:'POST',
     headers,
     body: JSON.stringify({
-      model:'deepseek-chat',
+      model: model,
       messages: [...(sys?[{role:'system',content:sys}]:[]), {role:'user',content:prompt}],
       max_tokens:2000, temperature:0.7
     })
   });
-  if (!r.ok) throw new Error(`DeepSeek request failed with status ${r.status}`);
+  if (!r.ok) {
+    const errorText = await r.text();
+    console.error('Groq API Error:', errorText);
+    throw new Error(`Groq request failed with status ${r.status}: ${errorText}`);
+  }
   const d = await r.json();
   const content = d?.choices?.[0]?.message?.content;
-  if (!content) throw new Error('DeepSeek response did not include message content');
+  if (!content) throw new Error('Groq response did not include message content');
   return content;
 }
 function parseModelJSON(raw) {
@@ -1088,6 +1101,24 @@ function askQuestion(i) {
 }
 
 // ── RECORDING + SPEECH RECOGNITION ──────────────────────────────
+// Create speech recognition once and reuse it
+let globalRecognition = null;
+function initSpeechRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return null;
+  
+  const rec = new SR();
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.onerror = (e) => {
+    // Ignore 'no-speech' and 'aborted' errors, they're normal
+    if (e.error !== 'no-speech' && e.error !== 'aborted') {
+      console.warn('Speech recognition error:', e.error);
+    }
+  };
+  return rec;
+}
+
 function startListening() {
   setRobot('listening');
   doneBtn.disabled = false;
@@ -1109,13 +1140,14 @@ function startListening() {
     }
   } catch {}
 
-  // Speech recognition
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (SR) {
-    const rec = new SR();
-    rec.continuous=true; rec.interimResults=true;
+  // Speech recognition - reuse the same instance
+  if (!globalRecognition) {
+    globalRecognition = initSpeechRecognition();
+  }
+  
+  if (globalRecognition) {
     let finalT = '';
-    rec.onresult = ev => {
+    globalRecognition.onresult = ev => {
       let interim = '';
       for (let i=ev.resultIndex;i<ev.results.length;i++) {
         if (ev.results[i].isFinal) finalT += ev.results[i][0].transcript+' ';
@@ -1126,9 +1158,15 @@ function startListening() {
       fillerCountEl.textContent = fillerCount;
       if (fillerCount > 5 && fillerCount % 3 === 0) showToast(`🗣️ ${fillerCount} filler words — try pausing!`,'#F5A623');
     };
-    rec.onerror = () => {};
-    rec.start();
-    window.currentRecognition = rec;
+    
+    try {
+      globalRecognition.start();
+    } catch (e) {
+      // If already started, just continue
+      console.log('Recognition already running or error:', e);
+    }
+    
+    window.currentRecognition = globalRecognition;
     window.currentFinalTranscript = () => finalT;
   } else {
     fallbackRow.classList.add('show');

@@ -366,7 +366,7 @@ if (Math.abs(SCORE_WEIGHT_TOTAL - 1) > Number.EPSILON) throw new Error('Score we
 // Keep prompt payloads bounded for browser-side API cost and model context limits.
 const RESUME_TEXT_MAX_LENGTH = 2500;
 const ANSWER_TEXT_MAX_LENGTH = 1200;
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 // ── Loading tips cycling ──────────────────────────────────────────
 const tips = ['Reviewing your answers...','Counting filler words...','Checking STAR structure...','Generating resume tips...','Analysing body language...','Almost done...'];
@@ -385,23 +385,36 @@ function updateStreak() {
   localStorage.setItem('practiceStreak', JSON.stringify(s));
 }
 
-// ── DeepSeek ──────────────────────────────────────────────────────
+// ── Groq ──────────────────────────────────────────────────────────
+function getModelBasedOnInterviewType() {
+  const settings = JSON.parse(localStorage.getItem('interviewSettings') || '{}');
+  const interviewType = settings.interviewType || 'general';
+  
+  // Use Llama 3.3 70B for technical interviews, Llama 4 Maverick for others
+  return interviewType === 'technical' ? 'llama-3.3-70b-versatile' : 'llama-4-maverick';
+}
+
 async function callDeepSeek(prompt, sys='') {
-  const key = typeof DEEPSEEK_API_KEY === 'string' ? DEEPSEEK_API_KEY.trim() : '';
-  if (!key || key === 'YOUR_DEEPSEEK_API_KEY_HERE') {
-    throw new Error('DeepSeek API key is missing. Copy config.example.js to config.js and set DEEPSEEK_API_KEY.');
+  const key = typeof GROQ_API_KEY === 'string' ? GROQ_API_KEY.trim() : '';
+  if (!key || key === 'YOUR_GROQ_API_KEY_HERE') {
+    throw new Error('Groq API key is missing. Update config.js with GROQ_API_KEY.');
   }
 
+  const model = getModelBasedOnInterviewType();
   const headers = {'Content-Type':'application/json', 'Authorization':'Bearer ' + key};
-  const r = await fetch(DEEPSEEK_API_URL,{
+  const r = await fetch(GROQ_API_URL,{
     method:'POST',
     headers,
-    body:JSON.stringify({model:'deepseek-chat',messages:[...(sys?[{role:'system',content:sys}]:[]),{role:'user',content:prompt}],max_tokens:3000,temperature:0.7})
+    body:JSON.stringify({model:model,messages:[...(sys?[{role:'system',content:sys}]:[]),{role:'user',content:prompt}],max_tokens:3000,temperature:0.7})
   });
-  if (!r.ok) throw new Error(`DeepSeek request failed with status ${r.status}`);
+  if (!r.ok) {
+    const errorText = await r.text();
+    console.error('Groq API Error:', errorText);
+    throw new Error(`Groq request failed with status ${r.status}: ${errorText}`);
+  }
   const d = await r.json();
   const content = d?.choices?.[0]?.message?.content;
-  if (!content) throw new Error('DeepSeek response did not include message content');
+  if (!content) throw new Error('Groq response did not include message content');
   return content;
 }
 function parseModelJSON(raw) {
