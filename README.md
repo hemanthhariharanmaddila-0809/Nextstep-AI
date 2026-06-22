@@ -95,8 +95,8 @@ Firefox/Safari users get a text fallback input for answers.
 
 ### Team
 
-- **Atharv Bhosale** — Co-founder, Developer
 - **Hemanth HariHaran** — Co-founder, Developer
+- **Atharv Bhosale** — Co-founder, Developer
 
 **Team:** Avenir  
 **Hackathon:** USAII Global AI Hackathon 2026  
